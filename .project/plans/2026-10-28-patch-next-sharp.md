@@ -4,7 +4,8 @@
 
 **Goal:** Lift `next` to 16.4.1 and `sharp` to ≥ 0.35.5 so the published Next.js advisories (two critical
 unauthenticated RCEs and a Server Actions DoS) are closed, pin that floor with a test, and make
-`SECURITY.md`'s advisory table true again.
+`SECURITY.md`'s advisory table true again. First, stop the two upstream-only workflows (website
+publishing and releases) from ever running on this fork.
 
 **Architecture:** A dependency bump in `package.json` and `yarn.lock`, with `sharp` held by a root
 `resolutions` pin. A new unit test reads the installed versions and fails if either falls below the
@@ -23,8 +24,10 @@ the repo). The relevant decisions are copied into Global Constraints below.
 - No other dependency changes. If `yarn install` moves other packages, only the ones `next` 16.4.1 requires may move.
 - Feature branch only, never `main`. Don't merge, don't build or push images. PJ merges.
 - Run every yarn command through `docker/bin/yarn` (Node 24 image, Postgres for `*.db.test.ts`). If Docker isn't
-  available, say so and report which commands were not run. Never claim a run that didn't happen.
+  available, say so and report which commands were not run; `ci.yml` runs them all on the PR. Never claim a
+  run that didn't happen.
 - Coverage gates in `vitest.config.mts` are hard: 86 % lines overall, 94 % lines for `src/lib/**`. Don't lower them.
+- Don't touch `ci.yml`, including its `image` job. Docker builds get reworked later.
 - Don't change `proxy.ts`, `csp.ts`, `session.ts` or any auth code in this plan.
 
 ## Review Focus
@@ -32,19 +35,65 @@ the repo). The relevant decisions are copied into Global Constraints below.
 1. **Signed-out Server Action calls.** `src/proxy.ts:33` passes any request with a `next-action` header through
    before the session check, and `action()` then returns its own friendly error. A Next minor bump can change
    how Server Actions are dispatched. Expected: `src/proxy.test.ts` (the `next-action` case at line 119) and
-   `src/lib/action.test.ts` still pass unchanged. Covered by Task 1, Step 5.
+   `src/lib/action.test.ts` still pass unchanged. Covered by Task 2, Step 5.
 2. **Generated route types.** `yarn typecheck` runs `next typegen` first. 16.4 may emit different route types.
-   Expected: typecheck is clean with no `@ts-expect-error` or `any` added. Covered by Task 1, Step 5.
+   Expected: typecheck is clean with no `@ts-expect-error` or `any` added. Covered by Task 2, Step 5.
 3. **ESLint rules from `eslint-config-next` 16.4.1.** New rules may flag existing code. Expected: fix the code,
-   don't disable the rule. Covered by Task 1, Step 5.
+   don't disable the rule. Covered by Task 2, Step 5.
 4. **Two copies of sharp in the lockfile.** If anything still resolves `sharp@0.35.4`, the pin hasn't taken.
-   Expected: exactly one `sharp@npm:` entry, at 0.35.5 or later. Covered by Task 1, Steps 1 and 4.
+   Expected: exactly one `sharp@npm:` entry, at 0.35.5 or later. Covered by Task 2, Steps 1 and 4.
 5. **Production image.** The `build` stage of the `Dockerfile` must still produce the standalone output with the
    linux-x64 sharp binary. Not run by agents (no image builds). PJ covers it in the manual follow-up, section B.
 
 ---
 
-### Task 1: Raise the floor for next and sharp, with a test that pins it
+### Task 1: Keep the upstream-only workflows from running on this fork
+
+`pages.yml` publishes the upstream project's website and `release.yml` creates releases and tags images
+`latest`. Neither has a purpose on PJ's fork. Guard each job on the repository name rather than deleting the
+files, so pulling upstream changes into those files doesn't hit modify/delete conflicts.
+
+**Files:**
+- Modify: `.github/workflows/pages.yml` (job `deploy`, line 32)
+- Modify: `.github/workflows/release.yml` (job `release`, line 20)
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: nothing later tasks use.
+
+- [ ] **Step 1: Check the current state**
+
+Run: `grep -n "github.repository ==" .github/workflows/pages.yml .github/workflows/release.yml`
+Expected: no output (no guard yet).
+
+- [ ] **Step 2: Add the guard**
+
+In each file, directly under the job's `name:` line, add:
+
+```yaml
+    # Upstream only: this fork doesn't publish the website or cut releases.
+    if: github.repository == 'AienTech/dossier'
+```
+
+Leave the `on:` triggers alone. A job-level `if` also covers manual `workflow_dispatch` runs.
+
+- [ ] **Step 3: Verify**
+
+Run: `python3 -c "import yaml,sys; [print(f, yaml.safe_load(open(f))['jobs'][j]['if']) for f,j in [('.github/workflows/pages.yml','deploy'),('.github/workflows/release.yml','release')]]"`
+Expected: both lines print `github.repository == 'AienTech/dossier'`.
+Run: `git diff --stat`
+Expected: only the two workflow files, 2 lines added in each.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add .github/workflows/pages.yml .github/workflows/release.yml
+git commit -m "Keep the Pages and Release workflows from running on this fork"
+```
+
+---
+
+### Task 2: Raise the floor for next and sharp, with a test that pins it
 
 **Files:**
 - Create: `src/dependency-floor.test.ts`
@@ -53,7 +102,7 @@ the repo). The relevant decisions are copied into Global Constraints below.
 
 **Interfaces:**
 - Consumes: nothing.
-- Produces: the installed versions `next@16.4.1` and `sharp@>=0.35.5`, which Task 2 records in `SECURITY.md`.
+- Produces: the installed versions `next@16.4.1` and `sharp@>=0.35.5`, which Task 3 records in `SECURITY.md`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -123,13 +172,13 @@ Closes GHSA-2464-fhr4-w9xw, GHSA-673q-mjm6-r5xr and GHSA-p3m5-59mp-jv5r
 
 ---
 
-### Task 2: Make the advisory table in SECURITY.md true again
+### Task 3: Make the advisory table in SECURITY.md true again
 
 **Files:**
 - Modify: `SECURITY.md` (section "## Dependencies", lines 39-48 at v1.9.2)
 
 **Interfaces:**
-- Consumes: the lockfile from Task 1.
+- Consumes: the lockfile from Task 2.
 - Produces: nothing code depends on.
 
 - [ ] **Step 1: Collect the current advisories**
@@ -160,6 +209,9 @@ git commit -m "Refresh the dependency advisory table in SECURITY.md"
 ---
 
 ## Manual follow-up (PJ, not agents)
+
+**A. Enable Actions on the fork.** GitHub turns Actions off on forks. Enable them in the repo's Actions tab
+before the PR is opened, so `ci.yml` runs the checks this plan relies on.
 
 These steps finish roadmap step 1. They need PJ's VM, accounts and judgement, so they aren't agent tasks.
 
