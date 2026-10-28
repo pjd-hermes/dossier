@@ -46,7 +46,8 @@ the repo). The relevant decisions are copied into Global Constraints below.
 4. **Two copies of sharp in the lockfile.** If anything still resolves `sharp@0.35.4`, the pin hasn't taken.
    Expected: exactly one `sharp@npm:` entry, at 0.35.5 or later. Covered by Task 2, Steps 1 and 4.
 5. **Production image.** The `build` stage of the `Dockerfile` must still produce the standalone output with the
-   linux-x64 sharp binary. Not run by agents (no image builds). PJ covers it in the manual follow-up, section B.
+   linux-x64 sharp binary. Not run by agents. CI's `image` job builds it after the merge to `main`, and PJ's
+   deploy (manual follow-up, section B) runs it.
 
 ---
 
@@ -265,17 +266,22 @@ before the PR is opened, so `ci.yml` runs the checks this plan relies on.
 
 These steps finish roadmap step 1. They need PJ's VM, accounts and judgement, so they aren't agent tasks.
 
-**B. Build and deploy on the VM.** `compose.production.yml` defaults to `ghcr.io/aientech/dossier:latest`,
-which doesn't contain this patch.
-1. On the VM: check out the merged branch and run `docker build -t dossier:1.9.2-p1 .`
+**B. Deploy on the VM from your own GHCR image.** No workflow change is needed for this: the `image` job
+in `ci.yml` already runs on this fork. After a merge to `main` passes CI, it publishes
+`ghcr.io/pjd-hermes/dossier:<commit sha>` and `ghcr.io/pjd-hermes/dossier:main` (amd64).
+1. After the first merge, open the package under your GitHub profile → Packages → `dossier`, and check that
+   its visibility is what you want. If it's private, on the VM run `docker login ghcr.io` with a classic
+   personal access token that has only `read:packages`.
 2. In a folder of its own, save `compose.production.yml` as `compose.yml`, and write a `.env` with
-   `POSTGRES_PASSWORD`, `DOSSIER_PASSWORD` (from `docker run --rm -it dossier:1.9.2-p1 hash-password`),
-   `DOSSIER_SECRET` (`openssl rand -base64 32`), `DOSSIER_IMAGE=dossier:1.9.2-p1`, `TZ` and `DOSSIER_PUBLIC_URL`.
+   `POSTGRES_PASSWORD`, `DOSSIER_PASSWORD` (from `docker run --rm -it ghcr.io/pjd-hermes/dossier:<sha> hash-password`),
+   `DOSSIER_SECRET` (`openssl rand -base64 32`), `DOSSIER_IMAGE=ghcr.io/pjd-hermes/dossier:<sha>`, `TZ` and
+   `DOSSIER_PUBLIC_URL`. Pin the commit sha, not `:main`, so an upgrade is always a deliberate edit.
 3. Run `docker compose up -d` and watch `docker compose logs -f app` until migrations and the theme seed finish.
 4. Put a reverse proxy with TLS (Caddy) in front of `127.0.0.1:3000`. Never expose 3000 directly.
 5. Under Settings → AI provider → OpenAI-compatible, enter `https://openrouter.ai/api/v1` (no `/models`) and
    `deepseek/deepseek-chat`. Set a credit limit on the key.
 6. Smoke test: sign in, import a resume, create an application from a pasted posting, and download the PDF.
+7. To upgrade: take a backup, change the sha in `.env`, then run `docker compose pull && docker compose up -d`.
 
 **C. JSearch check (10 minutes).** Search Find jobs for the exact title and city of a live NEOGOV posting.
 Record the result in `roadmap.md`. A miss rules JSearch out for government jobs.
