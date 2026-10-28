@@ -8,7 +8,7 @@ JSearch did not find the government postings in PJ's own testing.
 
 | # | Step | Why this order | Plan |
 |---|---|---|---|
-| 1 | Patch and deploy, and sign up for alerts | Closes the live Next.js advisories before anything is exposed; alert emails start collecting for step 4 | [2026-10-28-patch-next-sharp.md](2026-10-28-patch-next-sharp.md) |
+| 1 | Patch, bring in upstream PR #19 (OpenCode Go), deploy, and sign up for alerts | Closes the live Next.js advisories before anything is exposed; alert emails start collecting for step 4 | [2026-10-28-patch-next-sharp.md](2026-10-28-patch-next-sharp.md) |
 | 2 | Saved searches, one per job type (upstream issue #11, maintainer-approved scope) | Main discovery tool for everything JSearch/Adzuna can see | to write |
 | 3 | `import_posting` MCP tool | Shared entry point for postings that come from outside the search adapters | to write |
 | 4 | Email-alert ingestion (NEOGOV Job Interest Cards first) | Covers the government postings JSearch misses; needs step 3 and the emails collected since step 1 | to write |
@@ -18,7 +18,6 @@ JSearch did not find the government postings in PJ's own testing.
 - **ATS adapters (Greenhouse, Ashby, Lever):** each board is one employer, queried by company slug, so they
   don't serve a job-type search. Revisit only if a list of target employers appears. RemoteOK is
   cross-company and stays a candidate if remote roles matter.
-- **Upstream PR #19 (OpenCode Go):** not needed; OpenRouter works.
 
 ## Standing rules
 

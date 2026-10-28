@@ -5,7 +5,8 @@
 **Goal:** Lift `next` to 16.4.1 and `sharp` to ≥ 0.35.5 so the published Next.js advisories (two critical
 unauthenticated RCEs and a Server Actions DoS) are closed, pin that floor with a test, and make
 `SECURITY.md`'s advisory table true again. First, stop the two upstream-only workflows (website
-publishing and releases) from ever running on this fork.
+publishing and releases) from ever running on this fork. Last, bring in upstream PR #19, which adds
+OpenCode Go as an AI provider.
 
 **Architecture:** A dependency bump in `package.json` and `yarn.lock`, with `sharp` held by a root
 `resolutions` pin. A new unit test reads the installed versions and fails if either falls below the
@@ -27,6 +28,8 @@ the repo). The relevant decisions are copied into Global Constraints below.
   available, say so and report which commands were not run; `ci.yml` runs them all on the PR. Never claim a
   run that didn't happen.
 - Coverage gates in `vitest.config.mts` are hard: 86 % lines overall, 94 % lines for `src/lib/**`. Don't lower them.
+- PR #19 comes in as a cherry-pick of upstream commit `65baf1bf12fc76626b3730b5e0dbe098632fb046` with `-x`,
+  keeping its author. Don't rewrite it; fixes go in a separate commit after it.
 - Don't touch `ci.yml`, including its `image` job. Docker builds get reworked later.
 - Don't change `proxy.ts`, `csp.ts`, `session.ts` or any auth code in this plan.
 
@@ -208,6 +211,53 @@ git commit -m "Refresh the dependency advisory table in SECURITY.md"
 
 ---
 
+### Task 4: Bring in upstream PR #19 (OpenCode Go provider)
+
+Upstream PR: https://github.com/AienTech/dossier/pull/19, one commit by Alexandre Tostivint, based on v1.9.2.
+It adds the `OPENCODE_GO` value to the `AiProvider` enum (migration
+`20261027090000_ai_provider_opencode_go`), a provider in `src/lib/ai/providers/opencode-go.ts`, an optional
+`defaultHeaders` argument on `OpenAICompatibleProvider`, a settings card option, env var `opencode-go`, docs
+and tests. 21 files, +398/-16. A trial cherry-pick onto this plan's branch applied without conflicts
+(2026-10-28). Data export and import don't list AI providers, so the enum value needs no change there.
+
+**Files:**
+- All of the commit's files, unchanged. Notably `prisma/schema.prisma`, the migration above,
+  `src/lib/ai/providers/opencode-go.ts`, `src/lib/ai/providers/openai-compatible.ts`, `src/lib/ai/index.ts`,
+  `src/lib/ai/config.ts`, `src/lib/jobs/refine.ts`.
+
+**Interfaces:**
+- Consumes: nothing from Tasks 1-3.
+- Produces: `AiProvider.OPENCODE_GO`; `getAiProvider(sessionId?: string)`, now taking an optional id
+  that refine passes as `applicationId`.
+
+- [ ] **Step 1: Fetch the commit**
+
+Run: `git fetch https://github.com/AienTech/dossier pull/19/head:refs/upstream/pr-19 && git log --oneline -1 refs/upstream/pr-19`
+Expected: `65baf1b Add OpenCode Go as an AI provider`. If the head has moved, stop and report the new SHA
+and commits rather than picking them.
+
+- [ ] **Step 2: Cherry-pick it**
+
+Run: `git cherry-pick -x 65baf1bf12fc76626b3730b5e0dbe098632fb046`
+Expected: one new commit, author Alexandre Tostivint, no conflicts. If it conflicts, abort
+(`git cherry-pick --abort`) and report the conflicting files.
+
+- [ ] **Step 3: Run the checks**
+
+Run: `docker/bin/yarn prisma generate && docker/bin/yarn typecheck && docker/bin/yarn lint`
+Run: `docker/bin/yarn vitest run src/lib/ai src/lib/env.test.ts "src/app/(app)/settings"`
+Run: `docker/bin/yarn test:coverage`. The AI layer's gate is 94 % lines for `src/lib/ai/**`.
+Expected: all pass. `providers.live.test.ts` needs a real key and stays skipped. That's expected; say so.
+If the bump from Task 2 breaks something in this code, fix it in a separate commit
+("Fit OpenCode Go to next 16.4.1"), never by amending the cherry-pick.
+
+- [ ] **Step 4: Confirm the commit is unchanged**
+
+Run: `git show refs/upstream/pr-19 | git patch-id --stable; git log --format=%H --grep="cherry picked from commit 65baf1b" -1 | xargs git show | git patch-id --stable`
+Expected: the first field (the patch id) is the same on both lines.
+
+---
+
 ## Manual follow-up (PJ, not agents)
 
 **A. Enable Actions on the fork.** GitHub turns Actions off on forks. Enable them in the repo's Actions tab
@@ -233,3 +283,9 @@ Record the result in `roadmap.md`. A miss rules JSearch out for government jobs.
 **D. Alerts mailbox.** Create a dedicated mailbox and sign up with it directly (not forwarded) for NEOGOV
 Job Interest Cards and any LinkedIn or Indeed alerts for your job types. Note the provider in
 `roadmap.md` for step 4.
+
+**E. PR #19 when syncing upstream.** If upstream later merges #19, drop the cherry-picked commit before
+merging upstream in. If upstream's migration ends up with a different name, the enum value would be added
+twice and the app would fail to start on the second migration.
+Optional: comment on upstream PR #19 asking the maintainer to approve its CI run (an outside post, so it's
+yours to make).
