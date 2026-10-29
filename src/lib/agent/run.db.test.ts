@@ -125,7 +125,7 @@ describe("runAgentScan (E16-3)", () => {
     // Find jobs shows the scores too (#208).
     expect((await prisma().postingScore.findMany({ orderBy: { score: "desc" } })).map((row) => [row.externalId, row.score])).toEqual([["a", 90], ["b", 75], ["c", 40]]);
     // The run is on record, with how it ended.
-    expect((await loadSettings()).agentRuns).toEqual([{ at: now.toISOString(), manual: false, message: "2 new postings are waiting for a look." }]);
+    expect((await loadSettings()).agentRuns).toEqual([{ at: now.toISOString(), manual: false, message: "2 new postings are waiting for a look.", requests: [] }]);
   });
 
   it("scores the newest new postings first, up to the cap", async () => {
@@ -207,7 +207,7 @@ describe("runAgentScan (E16-3)", () => {
     const { searchPostings } = await import("@/lib/job-search");
     vi.mocked(searchPostings).mockRejectedValueOnce(new Error("socket hang up"));
     await expect(runAgentScan({ manual: false }, context(), now)).rejects.toThrow("socket hang up");
-    expect((await loadSettings()).agentRuns).toEqual([{ at: now.toISOString(), manual: false, message: null }]);
+    expect((await loadSettings()).agentRuns).toEqual([{ at: now.toISOString(), manual: false, message: null, requests: [] }]);
   });
 
   it("goes on when one score fails, and says what failed when none worked", async () => {

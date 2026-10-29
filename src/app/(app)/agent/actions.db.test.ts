@@ -70,9 +70,9 @@ describe("Run now (E16-4)", () => {
 
   it("waits an hour after the previous run, and keeps to 3 a day", async () => {
     const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
-    await saveSettings({ agentRuns: [{ at: at(20), manual: false, message: null }] });
+    await saveSettings({ agentRuns: [{ at: at(20), manual: false, message: null, requests: [] }] });
     expect(await runAgentNow({})).toEqual({ ok: false, error: "The agent ran less than an hour ago. Try again in 40 minutes." });
-    await saveSettings({ agentRuns: [at(70), at(200), at(400)].map((time) => ({ at: time, manual: true, message: null })) });
+    await saveSettings({ agentRuns: [at(70), at(200), at(400)].map((time) => ({ at: time, manual: true, message: null, requests: [] })) });
     expect(await runAgentNow({})).toMatchObject({ ok: false, error: expect.stringMatching(/^The agent has run 3 times in the past 24 hours/) });
   });
 });

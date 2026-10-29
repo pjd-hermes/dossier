@@ -61,3 +61,5 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `e2e/find-jobs.spec.ts` | The FreeHire test picks it in Find jobs | Saved searches, task 4 |
 | `src/lib/settings.ts` | `agentSearches` and `agentSourceCaps` settings | Saved searches, task 5 |
 | `src/lib/settings.test.ts` | Tests for the two settings | Saved searches, task 5 |
+| `src/lib/settings.ts` | `requests` on each agent run, and 30 runs kept | Saved searches, task 6 |
+| `src/lib/agent/runs.ts` | `recordRunStart` records the planned requests | Saved searches, task 6 |

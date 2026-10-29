@@ -3,6 +3,8 @@ import "server-only";
 import { AGENT_RUNS_KEPT, type AgentRun } from "@/lib/settings";
 import { loadSettings, saveSettings } from "@/lib/settings-data";
 
+import type { PlannedRequest } from "./plan";
+
 // The job agent's runs (E16), kept in Settings rather than as their Job rows,
 // which the task-data sweep deletes after "Keep task data for": the limits
 // below must hold whatever that is set to.
@@ -41,8 +43,8 @@ function waitText(ms: number): string {
 }
 
 /** Records a run as it starts, before it asks the source, so a crash and a retry can't spend the quota twice. */
-export async function recordRunStart(now: Date, manual: boolean): Promise<AgentRun> {
-  const run: AgentRun = { at: now.toISOString(), manual, message: null };
+export async function recordRunStart(now: Date, manual: boolean, requests: PlannedRequest[] = []): Promise<AgentRun> {
+  const run: AgentRun = { at: now.toISOString(), manual, message: null, requests };
   const { agentRuns } = await loadSettings();
   await saveSettings({ agentRuns: [run, ...agentRuns].slice(0, AGENT_RUNS_KEPT) });
   return run;

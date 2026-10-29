@@ -95,10 +95,12 @@ export const agentRunSchema = z.object({
   manual: z.boolean(),
   /** What the run ended with, for the Agent screen; null while it runs. */
   message: z.string().nullable(),
+  /** The provider requests the run planned, before any was sent: they count against each provider's daily cap. */
+  requests: z.array(z.object({ source: z.enum(JOB_SOURCES), searchId: z.string() })).default([]),
 });
 export type AgentRun = z.infer<typeof agentRunSchema>;
 /** How many runs are kept: more than a day's worth, for the limit and the screen. */
-export const AGENT_RUNS_KEPT = 10;
+export const AGENT_RUNS_KEPT = 30;
 
 export const settingsSchema = z.object({
   // AI provider (SET-1). Null means "not set in the app": fall back to the
