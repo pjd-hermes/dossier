@@ -49,3 +49,13 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `src/app/(app)/settings/job-search-section.tsx` | A card per provider, each with a switch, its keys and its own test, replacing the radio choice | Saved searches, task 3 |
 | `src/app/(app)/settings/job-search-section.test.tsx` | Tests for the cards | Saved searches, task 3 |
 | `e2e/find-jobs.spec.ts` | The Settings tests use the providers' switches and cards | Saved searches, task 3 |
+| `src/lib/posting-searches.ts` | `runSearch(query, source?)` searches a provider that is on and remembers the pick | Saved searches, task 4 |
+| `src/lib/posting-searches.db.test.ts` | Tests for the picked provider | Saved searches, task 4 |
+| `src/app/(app)/jobs/actions.ts` | `runJobSearch` takes an optional `source` | Saved searches, task 4 |
+| `src/app/(app)/jobs/actions.db.test.ts` | Test for `source` | Saved searches, task 4 |
+| `src/app/(app)/jobs/page.tsx` | Passes the providers that are on and JSearch's 30-day count | Saved searches, task 4 |
+| `src/app/(app)/jobs/jobs-screen.tsx` | A "Search on" picker among the providers that are on; the Bundesagentur note follows the pick | Saved searches, task 4 |
+| `src/app/(app)/jobs/jobs-screen.test.tsx` | Tests for the picker | Saved searches, task 4 |
+| `src/lib/connector/tools.ts` | `search_jobs` takes an optional `source` | Saved searches, task 4 |
+| `src/lib/connector/tools.db.test.ts` | Test for `source` in `search_jobs` | Saved searches, task 4 |
+| `e2e/find-jobs.spec.ts` | The FreeHire test picks it in Find jobs | Saved searches, task 4 |

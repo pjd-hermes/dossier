@@ -1,5 +1,6 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { askSource } from "@/lib/job-search/find";
 import { saveSettings } from "@/lib/settings-data";
 import { createTestClient, resetDatabase } from "@/test/db";
 
@@ -182,6 +183,19 @@ describe("the Claude connector's tools (#221)", () => {
     const ledgerly = await prisma().application.findFirstOrThrow({ where: { company: "Ledgerly" } });
     await prisma().job.update({ where: { id: job.id }, data: { status: "DONE", error: null, result: { applicationId: ledgerly.id } } });
     expect((await tool("check_draft", { draft_id: job.id })).json).toMatchObject({ status: "done", application_id: ledgerly.id });
+  });
+
+  it("searches the provider Claude names, when it's on", async () => {
+    await saveSettings({ jobSourcesOn: ["JSEARCH", "FREEHIRE"] });
+    vi.mocked(askSource).mockResolvedValueOnce({ ok: true, source: "FREEHIRE", postings: [{ ...found("f1", "Freehire posting"), source: "FREEHIRE" }], next: null });
+    const ran = await tool("search_jobs", { keywords: "designer", country: "de", source: "freehire" });
+    expect(askSource).toHaveBeenLastCalledWith(expect.objectContaining({ keywords: "designer" }), { source: "FREEHIRE" });
+    expect(ran.json).toMatchObject({ found: 1, postings: [{ title: "Freehire posting" }] });
+    expect(await prisma().postingSearch.findFirstOrThrow()).toMatchObject({ source: "FREEHIRE" });
+    expect(await prisma().setting.findUnique({ where: { key: "jobSource" } })).toMatchObject({ value: "FREEHIRE" });
+
+    const off = await tool("search_jobs", { keywords: "designer", country: "de", source: "adzuna" });
+    expect(off).toMatchObject({ isError: true, text: "Turn Adzuna on in Settings → Job search first." });
   });
 
   it("shows more of a search, and scores postings handed over by id", async () => {

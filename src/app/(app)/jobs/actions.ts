@@ -29,8 +29,8 @@ export const acceptArbeitsagenturNote = action(z.object({}), async () => {
   return null;
 });
 
-/** "Search": asks the chosen source and keeps the search with what it found; gives its id, or what went wrong. */
-export const runJobSearch = action(z.object({ query: searchQuerySchema }), ({ query }) => runSearch(query));
+/** "Search": asks the picked provider (Find jobs' own without one) and keeps the search with what it found; gives its id, or what went wrong. */
+export const runJobSearch = action(z.object({ query: searchQuerySchema, source: z.enum(JOB_SOURCES).optional() }), ({ query, source }) => runSearch(query, source));
 
 /** "Show more": the next page, added to the kept search. */
 export const showMorePostings = action(z.object({ searchId }), ({ searchId }) => showMoreFor(searchId));

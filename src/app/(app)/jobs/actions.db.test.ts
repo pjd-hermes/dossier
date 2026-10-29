@@ -79,6 +79,14 @@ describe("Find jobs actions", () => {
     expect(await prisma().postingSearch.count()).toBe(0);
   });
 
+  it("searches the provider it's given, and says when that one is off", async () => {
+    expect(await runJobSearch({ query, source: "FREEHIRE" })).toEqual({
+      ok: true,
+      data: { ok: false, problem: "off", message: "Turn FreeHire on in Settings → Job search first." },
+    });
+    expect(await runJobSearch({ query, source: "nope" as never })).toMatchObject({ ok: false });
+  });
+
   it("says why a search didn't run", async () => {
     expect(await runJobSearch({ query: { ...query, country: "" } })).toMatchObject({ ok: true, data: { ok: false, problem: "no-country" } });
     expect(await runJobSearch({ query: { ...query, radiusKm: 33 as never } })).toMatchObject({ ok: false });

@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Prisma } from "@/generated/prisma/client";
 import { daysBetween, formatDay, formatTime } from "@/lib/dates";
+import { loadJobSearchConfig } from "@/lib/job-search/config";
 import { askSource } from "@/lib/job-search/find";
 import {
   EMPTY_QUERY,
@@ -9,14 +10,17 @@ import {
   postingKey,
   searchQuerySchema,
   type FoundPosting,
+  type JobSource,
   type PastSearchDay,
   type SearchProblem,
   type SearchQuery,
   type ShownPosting,
   type StoredSearch,
 } from "@/lib/job-search/search";
+import { SOURCE_INFO } from "@/lib/job-search/sources";
 import { postingStates } from "@/lib/postings";
 import { prisma } from "@/lib/prisma";
+import { saveSettings } from "@/lib/settings-data";
 
 // Searches kept with what they found (E14-10), until the user removes them,
 // so going back to one costs no searches from the source's plan.
@@ -45,14 +49,21 @@ function ranAtLabel(date: Date, timeZone?: string, now = new Date()): string {
   return `${day} at ${formatTime(date, timeZone)}`;
 }
 
-/** Runs a search on the chosen source and keeps it with its first page. */
-export async function runSearch(query: SearchQuery): Promise<{ ok: true; id: string } | SearchProblem> {
-  const answer = await askSource(query);
+/**
+ * Runs a search and keeps it with its first page: on `source` when given (one
+ * that's on in Settings, remembered as Find jobs' pick), else on Find jobs' provider.
+ */
+export async function runSearch(query: SearchQuery, source?: JobSource): Promise<{ ok: true; id: string } | SearchProblem> {
+  if (source && !(await loadJobSearchConfig()).sourcesOn.includes(source)) {
+    return { ok: false, problem: "off", message: `Turn ${SOURCE_INFO[source].name} on in Settings → Job search first.` };
+  }
+  const answer = await askSource(query, { source });
   if (!answer.ok) return answer;
   const search = await prisma.postingSearch.create({
     data: { source: answer.source, query, postings: answer.postings, found: answer.postings.length, next: answer.next },
     select: { id: true },
   });
+  if (source) await saveSettings({ jobSource: source });
   return { ok: true, id: search.id };
 }
 

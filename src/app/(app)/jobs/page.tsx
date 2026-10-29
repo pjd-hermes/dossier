@@ -4,10 +4,12 @@ import { isAiUsable } from "@/lib/ai/config";
 import { handsOffToClaude } from "@/lib/connector/handoff";
 import { loadJobSearchConfig } from "@/lib/job-search/config";
 import { COUNTRIES } from "@/lib/job-search/countries";
+import { requestsInPastDays, SHOWN_DAYS } from "@/lib/job-search/usage";
 import { defaultSearch, latestRole, queryFromParams, viewFromParams } from "@/lib/job-search/search";
 import { countSearches, listSearches, loadSearch } from "@/lib/posting-searches";
 import { countPostings, listPostings } from "@/lib/postings";
 import { prisma } from "@/lib/prisma";
+import { loadSettings } from "@/lib/settings-data";
 import { userTimeZone } from "@/lib/time-zone";
 
 import { JobsScreen } from "./jobs-screen";
@@ -26,8 +28,9 @@ export default async function JobsPage({ searchParams }: PageProps<"/jobs">) {
   const view = viewFromParams(params);
   const typed = queryFromParams(params);
   const searchId = typeof params.search === "string" ? params.search : undefined;
-  const [config, timeZone, postingCounts, searches, scoreInClaude] = await Promise.all([
+  const [config, settings, timeZone, postingCounts, searches, scoreInClaude] = await Promise.all([
     loadJobSearchConfig(),
+    loadSettings(),
     userTimeZone(),
     countPostings(),
     countSearches(),
@@ -44,7 +47,9 @@ export default async function JobsPage({ searchParams }: PageProps<"/jobs">) {
   return (
     <JobsScreen
       source={config.source}
-      arbeitsagenturNote={config.source === "ARBEITSAGENTUR" && !config.arbeitsagentur.acceptedAt}
+      sources={config.sourcesOn}
+      jsearchUsed={requestsInPastDays(settings.jobSourceUsage, "JSEARCH", SHOWN_DAYS, now)}
+      arbeitsagenturNote={config.sourcesOn.includes("ARBEITSAGENTUR") && !config.arbeitsagentur.acceptedAt}
       scoreInClaude={scoreInClaude}
       // Named here: the browser's ICU can name a few countries differently from the server's.
       countries={COUNTRIES}

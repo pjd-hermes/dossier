@@ -114,18 +114,17 @@ test("scores a posting against the profile, and keeps the score (#208)", async (
 });
 
 test("searches FreeHire, which needs no key and has no radius", async ({ page }) => {
-  const chosen = async (source: string) =>
-    expect.poll(async () => (await sql<{ value: string }>(`SELECT value FROM "Setting" WHERE key = 'jobSourcesOn'`))[0]?.value).toContain(source);
+  const sourcesOn = async () => (await sql<{ value: string }>(`SELECT value FROM "Setting" WHERE key = 'jobSourcesOn'`))[0]?.value;
   await page.goto("/settings?section=jobs");
-  // Find jobs searches the first provider that's on, so JSearch goes off while FreeHire goes on.
+  // With FreeHire on beside JSearch, Find jobs offers both.
   await page.getByRole("switch", { name: "Use FreeHire" }).click();
-  await chosen("FREEHIRE");
-  await page.getByRole("switch", { name: "Use JSearch" }).click();
+  await expect.poll(sourcesOn).toBe('["JSEARCH","FREEHIRE"]');
   await expect(page.getByText("No key needed. Dossier searches FreeHire's public catalogue at freehire.me.")).toBeVisible();
-  await expect.poll(async () => (await sql<{ value: string }>(`SELECT value FROM "Setting" WHERE key = 'jobSourcesOn'`))[0]?.value).toBe('["FREEHIRE"]');
 
   await page.goto("/jobs?q=product+designer&where=Rotterdam&country=nl");
   const form = page.getByRole("search", { name: "Search postings" });
+  await expect(page.getByRole("radio", { name: "JSearch" })).toBeChecked();
+  await page.getByRole("radio", { name: "FreeHire" }).click();
   await expect(form.getByLabel("Within")).toBeDisabled();
   await expect(form.getByText("FreeHire has no distance filter")).toBeVisible();
   await form.getByRole("button", { name: "Search" }).click();
@@ -135,10 +134,9 @@ test("searches FreeHire, which needs no key and has no radius", async ({ page })
   await expect(page.getByRole("region", { name: "Posting text" })).toContainText("for its payments team");
   await expect(page.getByText("Jobs by FreeHire").last()).toBeVisible();
 
-  // Back to JSearch, as the environment sets it, for the tests after.
+  // Back to JSearch alone, as the environment sets it, for the tests after.
   await page.goto("/settings?section=jobs");
-  await page.getByRole("switch", { name: "Use JSearch" }).click();
-  await expect(page.getByLabel("API key")).toBeVisible();
   await page.getByRole("switch", { name: "Use FreeHire" }).click();
-  await expect.poll(async () => (await sql<{ value: string }>(`SELECT value FROM "Setting" WHERE key = 'jobSourcesOn'`))[0]?.value).toBe('["JSEARCH"]');
+  await expect.poll(sourcesOn).toBe('["JSEARCH"]');
+  await sql(`DELETE FROM "Setting" WHERE key = 'jobSource'`);
 });

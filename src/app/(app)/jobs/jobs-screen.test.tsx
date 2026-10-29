@@ -115,6 +115,28 @@ describe("the search form", () => {
     await waitFor(() => expect(router.push).toHaveBeenCalledWith("/jobs?search=run-2", { scroll: false }));
   });
 
+  it("lets you pick among the providers that are on, and searches the pick", async () => {
+    renderScreen({ sources: ["JSEARCH", "FREEHIRE"], jsearchUsed: 41 });
+    const picker = screen.getByRole("radiogroup", { name: "Search on" });
+    expect(within(picker).getAllByRole("radio").map((radio) => radio.textContent)).toEqual(["JSearch", "FreeHire"]);
+    expect(within(picker).getByRole("radio", { name: "JSearch" })).toBeChecked();
+    expect(screen.getByText("JSearch: 41 of 200 used in the past 30 days.")).toBeInTheDocument();
+
+    await userEvent.click(within(picker).getByRole("radio", { name: "FreeHire" }));
+    expect(screen.queryByText(/used in the past 30 days/)).not.toBeInTheDocument();
+    // The form follows the pick: FreeHire has no distance filter.
+    expect(screen.getByText("FreeHire has no distance filter")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(runJobSearch).toHaveBeenCalledWith({ query, source: "FREEHIRE" });
+  });
+
+  it("has no picker with one provider on, and asks for no particular one", async () => {
+    renderScreen({ sources: ["JSEARCH"] });
+    expect(screen.queryByRole("radiogroup", { name: "Search on" })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Search" }));
+    expect(runJobSearch).toHaveBeenCalledWith({ query, source: undefined });
+  });
+
   it("shows what went wrong, with Try again when the source isn't answering", async () => {
     vi.mocked(runJobSearch).mockResolvedValue({ ok: true, data: { ok: false, problem: "unavailable", message: "JSearch isn't answering right now." } });
     renderScreen();
@@ -371,6 +393,13 @@ describe("the Bundesagentur für Arbeit (#223)", () => {
     await userEvent.click(screen.getByRole("checkbox", { name: "I understand, and choose this source myself" }));
     expect(acceptArbeitsagenturNote).toHaveBeenCalledWith({});
     expect(router.refresh).toHaveBeenCalled();
+  });
+
+  it("shows the Bundesagentur's note only while it's the picked provider", async () => {
+    renderScreen({ source: "JSEARCH", sources: ["JSEARCH", "ARBEITSAGENTUR"], arbeitsagenturNote: true });
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("radio", { name: "Bundesagentur für Arbeit" }));
+    expect(screen.getByRole("note")).toBeInTheDocument();
   });
 
   it("leaves the note out once it's accepted, and for other sources", () => {
