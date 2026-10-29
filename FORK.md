@@ -63,3 +63,8 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `src/lib/settings.test.ts` | Tests for the two settings | Saved searches, task 5 |
 | `src/lib/settings.ts` | `requests` on each agent run, and 30 runs kept | Saved searches, task 6 |
 | `src/lib/agent/runs.ts` | `recordRunStart` records the planned requests | Saved searches, task 6 |
+| `src/lib/settings.test.ts` | `AgentRun` fixtures gain `requests: []`, and a test for runs saved without it | Saved searches, task 6 |
+| `src/app/(app)/agent/actions.db.test.ts` | `AgentRun` fixtures gain `requests: []` | Saved searches, task 6 |
+| `src/lib/agent/run.db.test.ts` | `AgentRun` fixtures gain `requests: []` | Saved searches, task 6 |
+| `src/lib/agent/schedule.db.test.ts` | `AgentRun` fixtures gain `requests: []` | Saved searches, task 6 |
+| `src/lib/agent/view.db.test.ts` | `AgentRun` fixtures gain `requests: []` | Saved searches, task 6 |

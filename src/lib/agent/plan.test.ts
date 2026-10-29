@@ -67,6 +67,11 @@ describe("planRequests", () => {
     expect(requests.filter((r) => r.source === "JSEARCH").map((r) => r.searchId)).toEqual(["s1", "s2"]);
     expect(skipped).toEqual([{ source: "JSEARCH", reason: "cap", cap: 2, searchIds: ["s3"] }]);
   });
+
+  it("holds the cap even when two searches share an id", () => {
+    const { requests } = plan([], { JSEARCH: 1 }, [search("x"), search("x")]);
+    expect(requests.filter((r) => r.source === "JSEARCH")).toHaveLength(1);
+  });
 });
 
 describe("pickToScore", () => {

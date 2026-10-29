@@ -28,7 +28,7 @@ export function planRequests({ searches, sources, caps, runs, now }: {
   now: Date;
 }): { requests: PlannedRequest[]; skipped: SkippedSource[] } {
   const inPastDay = runs.filter((run) => now.getTime() - Date.parse(run.at) < DAY_MS);
-  const chosen = new Map<string, Set<JobSource>>();
+  const chosen = new Map<number, Set<JobSource>>();
   const skipped: SkippedSource[] = [];
 
   for (const source of sources) {
@@ -38,19 +38,19 @@ export function planRequests({ searches, sources, caps, runs, now }: {
     const remaining = cap === "all" ? searches.length : Math.max(0, cap - used);
 
     const candidates = searches
-      .filter((search) => sourceCovers(source, search.country))
       .map((search, index) => ({ search, index, last: lastRan(runs, source, search.id) }))
+      .filter(({ search }) => sourceCovers(source, search.country))
       // Never ran first, then the one that ran longest ago; ties keep list order.
       .sort((a, b) => a.last - b.last || a.index - b.index);
 
-    for (const { search } of candidates.slice(0, remaining)) {
-      chosen.set(search.id, (chosen.get(search.id) ?? new Set()).add(source));
+    for (const { index } of candidates.slice(0, remaining)) {
+      chosen.set(index, (chosen.get(index) ?? new Set()).add(source));
     }
     const left = candidates.slice(remaining).sort((a, b) => a.index - b.index);
     if (left.length > 0 && cap !== "all") skipped.push({ source, reason: "cap", cap, searchIds: left.map(({ search }) => search.id) });
   }
 
-  const requests = searches.flatMap((search) => sources.filter((source) => chosen.get(search.id)?.has(source)).map((source) => ({ source, searchId: search.id })));
+  const requests = searches.flatMap((search, index) => sources.filter((source) => chosen.get(index)?.has(source)).map((source) => ({ source, searchId: search.id })));
   return { requests, skipped };
 }
 
