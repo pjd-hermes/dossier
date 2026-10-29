@@ -100,7 +100,7 @@ Each new unit has one job and can be tested without the screen.
 | Request planner | `src/lib/agent/plan.ts` (new, pure) | `planRequests(searches, sources, caps, runs, now)` → ordered `{ source, searchId }[]`, plus `skipped` per source with the reason. |
 | Fair scoring pick | `src/lib/agent/plan.ts` | `pickToScore(freshBySearch, max)`: newest first within each search, then one from each search in turn until `max`. |
 | Agent run | `src/lib/agent/run.ts` (upstream, moderate) | Runs the plan instead of one search; see Data flow. |
-| Settings actions | `src/app/(app)/settings/actions.ts` (upstream, small) + `src/app/(app)/settings/provider-actions.ts` (new) | Provider on/off, per-provider test, saved-search CRUD, caps. Every action through `action()`. |
+| Settings actions | `src/app/(app)/settings/actions.ts` (upstream, small) + `src/app/(app)/settings/provider-actions.ts` (new) + `src/app/(app)/agent/search-actions.ts` (new) | Provider on/off and per-provider test; saved-search CRUD and caps (next to the existing agent actions). Every action through `action()`. |
 | Job search section | `src/app/(app)/settings/job-search-section.tsx` (upstream, rewritten in place) | Provider cards with switch, keys, Test connection, usage line. Key fields reuse `KeyField`. |
 | Job agent section | `src/app/(app)/settings/agent-section.tsx` (upstream) + `saved-searches.tsx` and `source-caps.tsx` (new) | The saved-searches card and the per-provider caps card with the next-run preview. |
 | Agent screen | `src/lib/agent/view.ts`, `src/app/(app)/agent/agent-screen.tsx` (upstream, small) | Tag on each card; filter buttons with counts; summary line names searches and providers. |
@@ -119,7 +119,7 @@ Each new unit has one job and can be tested without the screen.
      the number of enabled searches; 0 skips it).
    - Order the enabled searches by when they last ran **on that provider** (never first, then oldest),
      ties by their order in the list. Take the first `remaining`.
-   - Interleave the result by search, so a failing provider late in the list doesn't starve a search.
+   - Group the result by search, in list order, so every search gets its first requests before a failing provider can end the run.
 4. The run is recorded with its planned requests **before** any is sent (as today), so a crash can't
    spend a provider's cap twice.
 5. Each request asks for the first page only. A `JobSearchError` from one provider is noted and the run
