@@ -59,3 +59,5 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `src/lib/connector/tools.ts` | `search_jobs` takes an optional `source` | Saved searches, task 4 |
 | `src/lib/connector/tools.db.test.ts` | Test for `source` in `search_jobs` | Saved searches, task 4 |
 | `e2e/find-jobs.spec.ts` | The FreeHire test picks it in Find jobs | Saved searches, task 4 |
+| `src/lib/settings.ts` | `agentSearches` and `agentSourceCaps` settings | Saved searches, task 5 |
+| `src/lib/settings.test.ts` | Tests for the two settings | Saved searches, task 5 |

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { AiProvider, Creativity, DateFormat, PaperSize, Tone } from "@/generated/prisma/enums";
 import { EMPTY_QUERY, JOB_SOURCES, JSEARCH_HOSTS, searchQuerySchema } from "@/lib/job-search/search";
+import { agentSearchSchema, DEFAULT_SOURCE_CAPS, MAX_AGENT_SEARCHES, sourceCapsSchema } from "@/lib/agent/search-schema";
 import { startupsRefreshSchema } from "@/lib/startups/types";
 
 /** Date styles for documents (SET-6), labelled with an example as in the prototype. */
@@ -164,6 +165,10 @@ export const settingsSchema = z.object({
   agentEnabled: flag(false),
   /** The search it runs, as Find jobs asks it; it needs keywords and a country to run. */
   agentQuery: json(searchQuerySchema).catch(EMPTY_QUERY),
+  /** The saved searches, up to five; null until saved once, when `agentQuery` stands in (searchesOf). */
+  agentSearches: json(z.array(agentSearchSchema).max(MAX_AGENT_SEARCHES)).nullable().catch(null),
+  /** The most searches a day each provider is sent; one not listed has no cap. */
+  agentSourceCaps: json(sourceCapsSchema).catch(DEFAULT_SOURCE_CAPS),
   /** The hour of the day it runs, in the user's time zone. */
   agentHour: z.coerce.number().int().min(0).max(23).catch(7),
   /** Postings scored below this stay out of the queue. */

@@ -66,6 +66,8 @@ describe("stored settings", () => {
       arbeitsagenturAcceptedAt: null,
       agentEnabled: false,
       agentQuery: { keywords: "", place: "", country: "", radiusKm: 25, remoteOnly: false, postedWithin: "any" },
+      agentSearches: null,
+      agentSourceCaps: { JSEARCH: 2 },
       agentHour: 7,
       agentMinScore: 70,
       agentMaxScores: 15,
@@ -183,5 +185,26 @@ describe("the job providers that are on", () => {
   it("falls back to null for nonsense or an unknown provider", () => {
     expect(read("nonsense")).toBeNull();
     expect(read('["NOPE"]')).toBeNull();
+  });
+});
+
+describe("saved searches and caps", () => {
+  const search = { id: "a1", name: "Designers", keywords: "designer", place: "", country: "nl", radiusKm: 25, remoteOnly: false, postedWithin: "any", enabled: true };
+  const read = (key: string, value: string) => settingsFromRows([{ key, value }]);
+
+  it("reads a saved list and up to five searches", () => {
+    expect(read("agentSearches", JSON.stringify([search])).agentSearches).toEqual([search]);
+    expect(read("agentSearches", "[]").agentSearches).toEqual([]);
+  });
+
+  it("falls back to null for six searches or nonsense", () => {
+    expect(read("agentSearches", JSON.stringify(Array.from({ length: 6 }, () => search))).agentSearches).toBeNull();
+    expect(read("agentSearches", "nonsense").agentSearches).toBeNull();
+  });
+
+  it("reads caps, and falls back to the default for one out of range", () => {
+    expect(read("agentSourceCaps", '{"JSEARCH":5,"ADZUNA":"all"}').agentSourceCaps).toEqual({ JSEARCH: 5, ADZUNA: "all" });
+    expect(read("agentSourceCaps", '{"JSEARCH":9}').agentSourceCaps).toEqual({ JSEARCH: 2 });
+    expect(read("agentSourceCaps", "nonsense").agentSourceCaps).toEqual({ JSEARCH: 2 });
   });
 });
