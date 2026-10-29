@@ -34,6 +34,7 @@ const card = (id: string, score: number, extra: Partial<AgentCandidateView> = {}
   error: null,
   applicationId: null,
   draftJobId: null,
+  search: null,
   ...extra,
 });
 const view: AgentView = {
@@ -42,7 +43,8 @@ const view: AgentView = {
   minScore: 70,
   maxScores: 15,
   maxDrafts: 3,
-  search: "Product designer · Rotterdam, 25 km · via JSearch",
+  searchSummary: "2 saved searches on JSearch and FreeHire",
+  filters: [],
   setupProblem: null,
   setupSection: null,
   limitReached: false,
@@ -61,7 +63,7 @@ describe("AgentScreen (E16-6)", () => {
   it("says what it searches, when it ran and when it runs next", () => {
     open();
     expect(screen.getByRole("heading", { level: 1, name: "Job agent" })).toBeInTheDocument();
-    expect(screen.getByText("Searches for").nextElementSibling).toHaveTextContent("Product designer · Rotterdam, 25 km · via JSearch");
+    expect(screen.getByText("Searches for").nextElementSibling).toHaveTextContent("2 saved searches on JSearch and FreeHire");
     expect(screen.getByText("Last run").nextElementSibling).toHaveTextContent("Tue 20 Oct, 07:002 new postings are waiting for a look.");
     expect(screen.getByText("Next run").nextElementSibling).toHaveTextContent("Wed 21 Oct, 07:00");
   });
@@ -174,5 +176,38 @@ describe("AgentScreen (E16-6)", () => {
     expect(screen.getByText("No drafts yet. After a run, the best new postings get a draft here.")).toBeInTheDocument();
     expect(screen.getByText("Nothing waiting yet. A run puts the postings that fit you best here.")).toBeInTheDocument();
     expect(screen.getByText("Last run").nextElementSibling).toHaveTextContent("Not yet");
+  });
+
+  it("tags postings with their search and filters the waiting ones by it", async () => {
+    const user = userEvent.setup();
+    const designer = { id: "a", name: "Designer" };
+    const writer = { id: "b", name: "Writer" };
+    open({
+      scored: [card("s1", 84, { search: designer }), card("s2", 72, { search: writer })],
+      belowMinimum: [card("b1", 40, { search: writer })],
+      filters: [
+        { id: "a", name: "Designer", count: 1 },
+        { id: "b", name: "Writer", count: 2 },
+      ],
+    });
+    const group = screen.getByRole("group", { name: "Show postings from" });
+    const all = within(group).getByRole("button", { name: "All searches · 3" });
+    expect(all).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Posting s1").parentElement).toHaveTextContent("Designer");
+
+    await user.click(within(group).getByRole("button", { name: "Writer · 2" }));
+    expect(within(group).getByRole("button", { name: "Writer · 2" })).toHaveAttribute("aria-pressed", "true");
+    expect(all).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByText("Posting s1")).not.toBeInTheDocument();
+    expect(screen.getByText("Posting s2")).toBeInTheDocument();
+    expect(screen.getByText("Posting d1")).toBeInTheDocument();
+
+    await user.click(all);
+    expect(screen.getByText("Posting s1")).toBeInTheDocument();
+  });
+
+  it("shows no filter buttons without filters", () => {
+    open();
+    expect(screen.queryByRole("group", { name: "Show postings from" })).not.toBeInTheDocument();
   });
 });

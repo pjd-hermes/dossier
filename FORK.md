@@ -87,3 +87,7 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `src/app/(app)/settings/agent-section.test.tsx` | Tests follow the saved searches, the new copy and the turn-on refusal | Saved searches, task 9 |
 | `src/app/(app)/settings/page.tsx` | Passes the saved searches, caps, agent providers and runs to the Job agent section | Saved searches, task 9 |
 | `e2e/agent.spec.ts` | Adds a saved search through the new UI before turning the agent on | Saved searches, task 9 |
+| `src/lib/agent/view.ts` | `search` becomes `searchSummary`; candidates carry their search; `filters` | Saved searches, task 10 |
+| `src/lib/agent/view.db.test.ts` | Tests follow the summary, the tags and the filters | Saved searches, task 10 |
+| `src/app/(app)/agent/agent-screen.tsx` | Search chip on each posting, filter buttons, the summary | Saved searches, task 10 |
+| `src/app/(app)/agent/agent-screen.test.tsx` | Tests for the chips and the filter | Saved searches, task 10 |

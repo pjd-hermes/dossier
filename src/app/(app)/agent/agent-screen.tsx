@@ -36,6 +36,7 @@ export function AgentScreen({ view }: { view: AgentView }) {
   const [runJobId, setRunJobId] = useState(view.runJobId);
   const [showBelow, setShowBelow] = useState(false);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
+  const [searchId, setSearchId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<AgentCandidateView | null>(null);
 
   const run = useJob<ScanResult>(runJobId, 0, (job) => {
@@ -85,8 +86,9 @@ export function AgentScreen({ view }: { view: AgentView }) {
     });
 
   const drafts = view.drafts.filter((candidate) => !hidden.has(candidate.id));
-  const scored = view.scored.filter((candidate) => !hidden.has(candidate.id));
-  const below = view.belowMinimum.filter((candidate) => !hidden.has(candidate.id));
+  const shown = (candidate: AgentCandidateView) => !hidden.has(candidate.id) && (!searchId || candidate.search?.id === searchId);
+  const scored = view.scored.filter(shown);
+  const below = view.belowMinimum.filter(shown);
   const empty = drafts.length === 0 && scored.length === 0;
 
   return (
@@ -105,7 +107,7 @@ export function AgentScreen({ view }: { view: AgentView }) {
 
         <Card padding="none" className="px-7 py-2">
           <dl>
-            <Fact label="Searches for">{view.search ?? "Nothing yet"}</Fact>
+            <Fact label="Searches for">{view.searchSummary ?? "Nothing yet"}</Fact>
             <Fact label="Last run">
               {view.lastRun ? (
                 <>
@@ -163,6 +165,21 @@ export function AgentScreen({ view }: { view: AgentView }) {
         </Section>
 
         <Section title="Scored postings" count={scored.length}>
+          {view.filters.length > 0 && (
+            <div role="group" aria-label="Show postings from" className="flex flex-wrap gap-2">
+              {[{ id: null, name: "All searches", count: view.scored.length + view.belowMinimum.length }, ...view.filters].map((filter) => (
+                <button
+                  key={filter.id ?? "all"}
+                  type="button"
+                  aria-pressed={searchId === filter.id}
+                  onClick={() => setSearchId(filter.id)}
+                  className="rounded-full border border-line px-3.5 py-1.5 text-meta text-ink aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-on-primary"
+                >
+                  {filter.name} · {filter.count}
+                </button>
+              ))}
+            </div>
+          )}
           {scored.length === 0 ? (
             <Empty>{empty ? "Nothing waiting yet. A run puts the postings that fit you best here." : "No postings waiting for a draft."}</Empty>
           ) : (
@@ -285,7 +302,10 @@ function CandidateCard({ candidate, children }: { candidate: AgentCandidateView;
     <Card padding="none" className="flex flex-col gap-3.5 px-6 py-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <h3 className="font-serif text-[20px] leading-tight text-pretty">{candidate.title}</h3>
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+            <h3 className="font-serif text-[20px] leading-tight text-pretty">{candidate.title}</h3>
+            {candidate.search && <span className="rounded-full border border-line-field bg-paper px-2.5 py-0.5 text-xs text-muted">{candidate.search.name}</span>}
+          </div>
           {candidate.company && <p className="text-sm text-ink">{candidate.company}</p>}
           {candidate.facts && <p className="text-meta text-muted">{candidate.facts}</p>}
           {candidate.origin && <p className="text-xs text-muted">{candidate.origin}</p>}
