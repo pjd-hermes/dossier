@@ -370,6 +370,27 @@ describe("runAgentScan with several saved searches and providers", () => {
     for (const sentQuery of sent) expect(Object.keys(sentQuery)).toEqual(Object.keys(searchQuerySchema.shape));
   });
 
+  it("asks no provider again once it's cancelled", async () => {
+    const abort = new AbortController();
+    fake.respond = (source, search) => {
+      abort.abort();
+      return perRequest(source, search);
+    };
+    const result = await runAgentScan({ manual: false }, context(abort), now);
+    expect(fake.requests).toEqual([["JSEARCH", "Product designer"]]);
+    expect(result.scored).toBe(0);
+    expect(await prisma().agentCandidate.count()).toBe(0);
+  });
+
+  it("asks no provider when it's cancelled before the first request", async () => {
+    const abort = new AbortController();
+    const run = context(abort);
+    run.step = async () => abort.abort();
+    const result = await runAgentScan({ manual: false }, run, now);
+    expect(fake.requests).toEqual([]);
+    expect(result).toEqual({ found: 0, fresh: 0, scored: 0, drafted: 0, skipped: 0, message: "Cancelled." });
+  });
+
   it("says so when no provider that's on can run the searches", async () => {
     await saveSettings({ agentSourceCaps: { JSEARCH: 0, ADZUNA: 0, FREEHIRE: 0 } });
     expect((await runAgentScan({ manual: false }, context(), now)).message).toBe("None of the providers that are on can run your saved searches.");

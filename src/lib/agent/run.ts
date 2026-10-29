@@ -14,7 +14,7 @@ import { credentialsFor, loadJobSearchConfig, requestContext, type JobSearchConf
 import { JobSearchError } from "@/lib/job-search/errors";
 import { agentSources, sourceProblem } from "@/lib/job-search/providers-on";
 import { postingKey, postingText, searchQuerySchema, type FoundPosting, type JobSource } from "@/lib/job-search/search";
-import { startJob, type JobContext } from "@/lib/jobs/runner";
+import { JOB_MESSAGES, startJob, type JobContext } from "@/lib/jobs/runner";
 import { logServerError } from "@/lib/log";
 import { saveScore } from "@/lib/posting-scores";
 import { postingStates } from "@/lib/postings";
@@ -127,6 +127,8 @@ export async function runAgentScan({ manual }: { manual: boolean }, context: Job
   const answered = new Map<JobSource, number>();
   const failed = new Map<JobSource, JobSearchError>();
   for (const { source, searchId } of plan.requests) {
+    // Cancelled: no more requests, which the providers would count.
+    if (context.signal.aborted) break;
     // A provider that failed isn't asked again this run: its key, quota or service is the trouble.
     if (failed.has(source)) continue;
     try {
@@ -139,8 +141,8 @@ export async function runAgentScan({ manual }: { manual: boolean }, context: Job
       failed.set(source, error);
     }
   }
-  // Every provider failed: the first one's error says why.
-  if (answered.size === 0) return finish(stopped([...failed.values()][0].message));
+  // Every provider failed, and the first one's error says why, or it was cancelled before any answered.
+  if (answered.size === 0) return finish(stopped(failed.size > 0 ? [...failed.values()][0].message : JOB_MESSAGES.cancelled));
 
   for (const [source, error] of failed) problems.push(failedProblem(source, error.message));
   const searched = searchedSentence(

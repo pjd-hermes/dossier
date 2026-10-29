@@ -91,5 +91,5 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `src/lib/agent/view.db.test.ts` | Tests follow the summary, the tags and the filters | Saved searches, task 10 |
 | `src/app/(app)/agent/agent-screen.tsx` | Search chip on each posting, filter buttons, the summary | Saved searches, task 10 |
 | `src/app/(app)/agent/agent-screen.test.tsx` | Tests for the chips and the filter | Saved searches, task 10 |
-| `src/lib/agent/run.ts` | Sends a provider the search's query alone, so Find jobs' cache can answer it | Saved searches, task 11 |
-| `src/lib/agent/run.db.test.ts` | Test for the query a provider is sent | Saved searches, task 11 |
+| `src/lib/agent/run.ts` | Sends a provider the search's query alone, so Find jobs' cache can answer it; stops sending requests once the run is cancelled | Saved searches, task 11 |
+| `src/lib/agent/run.db.test.ts` | Tests for the query a provider is sent and for cancelling between requests | Saved searches, task 11 |
