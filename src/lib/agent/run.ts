@@ -22,6 +22,7 @@ import { prisma } from "@/lib/prisma";
 import { loadProfile } from "@/lib/profile-data";
 import type { SettingsData } from "@/lib/settings";
 import { loadSettings } from "@/lib/settings-data";
+import { lastKnownTimeZone } from "@/lib/time-zone";
 
 import { agentDedupeKey, candidateData } from "./candidates";
 import { agentDraftJob, draftJobKey } from "./draft";
@@ -109,7 +110,7 @@ export async function runAgentScan({ manual }: { manual: boolean }, context: Job
     if (problem) problems.push(skippedProblem(source, problem));
     return !problem;
   });
-  const plan = planRequests({ searches, sources, caps: settings.agentSourceCaps, runs: settings.agentRuns, now });
+  const plan = planRequests({ searches, sources, caps: settings.agentSourceCaps, runs: settings.agentRuns, now, timeZone: await lastKnownTimeZone() });
 
   const run = await recordRunStart(now, manual, plan.requests);
   const finish = async (result: AgentScanResult) => {
@@ -118,7 +119,7 @@ export async function runAgentScan({ manual }: { manual: boolean }, context: Job
   };
   if (sources.length === 0) return finish(stopped(problems.join(" ")));
   if (plan.requests.length === 0) {
-    const tail = plan.skipped.length > 0 ? "Nothing to search until then." : "None of the providers that are on can run your saved searches.";
+    const tail = plan.skipped.length > 0 ? "Nothing to search until tomorrow." : "None of the providers that are on can run your saved searches.";
     return finish(stopped(runMessage({ searched: searchedSentence([], plan.skipped), problems, tail })));
   }
 

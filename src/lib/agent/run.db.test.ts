@@ -348,15 +348,31 @@ describe("runAgentScan with several saved searches and providers", () => {
     await saveSettings({ agentRuns: [{ at: earlier, manual: false, message: null, requests: used }] });
     const result = await runAgentScan({ manual: true }, context(), now);
     expect(fake.requests.map(([source]) => source)).not.toContain("JSEARCH");
-    expect(result.message).toContain("Searched 3 job types on Adzuna and FreeHire. JSearch's limit of 2 a day is used up until later.");
+    expect(result.message).toContain("Searched 3 job types on Adzuna and FreeHire. JSearch's limit of 2 a day is used up for today.");
 
     // With only JSearch on, there's nothing to do until its cap frees up, and the run is on record.
     fake.sourcesOn = ["JSEARCH"];
     fake.requests = [];
     const later = new Date(now.getTime() + 2 * hour);
-    expect((await runAgentScan({ manual: true }, context(), later)).message).toBe("JSearch's limit of 2 a day is used up until later. Nothing to search until then.");
+    expect((await runAgentScan({ manual: true }, context(), later)).message).toBe("JSearch's limit of 2 a day is used up for today. Nothing to search until tomorrow.");
     expect(fake.requests).toEqual([]);
-    expect((await runs())[0]).toMatchObject({ at: later.toISOString(), requests: [], message: "JSearch's limit of 2 a day is used up until later. Nothing to search until then." });
+    expect((await runs())[0]).toMatchObject({ at: later.toISOString(), requests: [], message: "JSearch's limit of 2 a day is used up for today. Nothing to search until tomorrow." });
+  });
+
+  it("counts a provider's cap per calendar day in the user's time zone", async () => {
+    // Yesterday's run at 07:12 in Amsterdam; today's starts a few minutes earlier in the day.
+    const yesterday = { at: "2026-10-19T05:12:00Z", manual: false, message: null, requests: [{ source: "JSEARCH" as const, searchId: "designer" }, { source: "JSEARCH" as const, searchId: "researcher" }] };
+    await saveSettings({ browserTimeZone: "Europe/Amsterdam", agentRuns: [yesterday] });
+    const today = new Date("2026-10-20T05:05:00Z");
+    await runAgentScan({ manual: false }, context(), today);
+    expect(fake.requests.filter(([source]) => source === "JSEARCH")).toEqual([["JSEARCH", "Product designer"], ["JSEARCH", "UX writer"]]);
+
+    // Run now later the same day finds today's two used.
+    fake.sourcesOn = ["JSEARCH"];
+    fake.requests = [];
+    const later = new Date(today.getTime() + 3 * hour);
+    expect((await runAgentScan({ manual: true }, context(), later)).message).toBe("JSearch's limit of 2 a day is used up for today. Nothing to search until tomorrow.");
+    expect(fake.requests).toEqual([]);
   });
 
   it("sends a provider the search's query only, as Find jobs does, so the cache can answer", async () => {

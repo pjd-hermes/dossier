@@ -13,7 +13,7 @@ const searches = [search("s1"), search("s2"), search("s3")];
 const sources = ["JSEARCH", "ADZUNA", "FREEHIRE"] as const;
 const runWith = (hours: number, requests: AgentRun["requests"]): AgentRun => ({ at: hoursAgo(hours), manual: false, message: null, requests });
 const jsearchFor = (...ids: string[]) => ids.map((searchId) => ({ source: "JSEARCH" as const, searchId }));
-const plan = (runs: AgentRun[] = [], caps = DEFAULT_SOURCE_CAPS, list = searches) => planRequests({ searches: list, sources, caps, runs, now });
+const plan = (runs: AgentRun[] = [], caps = DEFAULT_SOURCE_CAPS, list = searches, timeZone = "UTC") => planRequests({ searches: list, sources, caps, runs, now, timeZone });
 const jsearchIds = (requests: { source: string; searchId: string }[]) => requests.filter((r) => r.source === "JSEARCH").map((r) => r.searchId);
 
 describe("planRequests", () => {
@@ -28,19 +28,22 @@ describe("planRequests", () => {
     expect(skipped).toEqual([{ source: "JSEARCH", reason: "cap", cap: 2, searchIds: ["s3"] }]);
   });
 
-  it("counts requests from the past 24 hours against the cap", () => {
-    const { requests, skipped } = plan([runWith(20, jsearchFor("s1", "s2"))]);
+  it("counts requests from earlier the same day against the cap", () => {
+    const { requests, skipped } = plan([runWith(1, jsearchFor("s1", "s2"))]);
     expect(jsearchIds(requests)).toEqual([]);
     expect(skipped).toEqual([{ source: "JSEARCH", reason: "cap", cap: 2, searchIds: ["s1", "s2", "s3"] }]);
   });
 
-  it("stops counting requests from 24 hours ago, and picks never-run searches first, then ties in list order", () => {
-    const { requests } = plan([runWith(25, jsearchFor("s1", "s2"))]);
+  it("stops counting requests from the day before, even 23 hours ago, and picks never-run searches first, then ties in list order", () => {
+    const { requests } = plan([runWith(23, jsearchFor("s1", "s2"))]);
     expect(jsearchIds(requests)).toEqual(["s1", "s3"]);
   });
 
-  it("does not count a request made exactly 24 hours ago", () => {
-    expect(jsearchIds(plan([runWith(24, jsearchFor("s1", "s2"))]).requests)).toEqual(["s1", "s3"]);
+  it("goes by the day in the user's time zone", () => {
+    // 06:00 UTC is the same day as noon UTC, but 23:00 the evening before in Los Angeles.
+    const runs = [runWith(6, jsearchFor("s1", "s2"))];
+    expect(jsearchIds(plan(runs, DEFAULT_SOURCE_CAPS, searches, "UTC").requests)).toEqual([]);
+    expect(jsearchIds(plan(runs, DEFAULT_SOURCE_CAPS, searches, "America/Los_Angeles").requests)).toEqual(["s1", "s3"]);
   });
 
   it("goes by the newest run that requested the pair", () => {
@@ -56,7 +59,7 @@ describe("planRequests", () => {
   });
 
   it("never plans the Bundesagentur", () => {
-    const { requests } = planRequests({ searches, sources: ["ARBEITSAGENTUR"], caps: {}, runs: [], now });
+    const { requests } = planRequests({ searches, sources: ["ARBEITSAGENTUR"], caps: {}, runs: [], now, timeZone: "UTC" });
     expect(requests).toEqual([]);
   });
 

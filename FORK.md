@@ -99,3 +99,7 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `src/lib/agent/jobs.ts` | The `agent-scan` comment says what a run sends now | Saved searches, task 11 |
 | `src/lib/job-search/search.ts` | The `JOB_SOURCES` comment: several can be on | Saved searches, task 11 |
 | `src/lib/job-search/find.ts` | The `askSource` comment names Find jobs' provider | Saved searches, task 11 |
+| `src/lib/agent/run.ts` | Plans with the user's time zone, so caps count per calendar day; "Nothing to search until tomorrow." | Saved searches, final fixes |
+| `src/lib/agent/run.db.test.ts` | Tests for the cap per calendar day, and the new "used up for today" message | Saved searches, final fixes |
+| `src/app/(app)/settings/agent-section.tsx` | Passes the time zone to the next-run preview | Saved searches, final fixes |
+| `DEVELOPMENT.md` | Caps per provider count per calendar day in the user's time zone | Saved searches, final fixes |

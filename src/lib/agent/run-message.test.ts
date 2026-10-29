@@ -17,9 +17,9 @@ describe("what a run says it searched", () => {
     );
     const usedUp = { ...jsearchCapped, searchIds: ["a", "b", "c"] };
     expect(searchedSentence([["JSEARCH", 0], ["ADZUNA", 3], ["FREEHIRE", 3]], [usedUp])).toBe(
-      "Searched 3 job types on Adzuna and FreeHire. JSearch's limit of 2 a day is used up until later.",
+      "Searched 3 job types on Adzuna and FreeHire. JSearch's limit of 2 a day is used up for today.",
     );
-    expect(searchedSentence([], [usedUp])).toBe("JSearch's limit of 2 a day is used up until later.");
+    expect(searchedSentence([], [usedUp])).toBe("JSearch's limit of 2 a day is used up for today.");
   });
 
   it("says which provider was skipped for its key, and which didn't answer", () => {

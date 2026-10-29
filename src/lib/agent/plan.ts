@@ -1,3 +1,4 @@
+import { dayOf } from "@/lib/calendar-view";
 import type { JobSource } from "@/lib/job-search/search";
 import { sourceCovers } from "@/lib/job-search/sources";
 import type { AgentRun } from "@/lib/settings";
@@ -7,17 +8,16 @@ import type { AgentSearch, SourceCaps } from "./search-schema";
 
 // Pure, so the Job agent settings screen can preview a run in the browser.
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-
 export type PlannedRequest = { source: JobSource; searchId: string };
 /** Searches a provider was not sent because its daily cap was used up. */
 export type SkippedSource = { source: JobSource; reason: "cap"; cap: number; searchIds: string[] };
 
 /**
  * Which searches go to which provider on this run: each provider gets at most
- * its cap in 24 hours, to the searches it has not been asked about the longest.
+ * its cap per calendar day in the user's time zone, to the searches it has not
+ * been asked about the longest.
  */
-export function planRequests({ searches, sources, caps, runs, now }: {
+export function planRequests({ searches, sources, caps, runs, now, timeZone }: {
   /** Runnable, in list order. */
   searches: readonly AgentSearch[];
   /** With credentials, in `JOB_SOURCES` order. */
@@ -26,15 +26,18 @@ export function planRequests({ searches, sources, caps, runs, now }: {
   /** Newest first, as stored. */
   runs: readonly AgentRun[];
   now: Date;
+  /** The user's; a provider's cap resets at their midnight. */
+  timeZone: string;
 }): { requests: PlannedRequest[]; skipped: SkippedSource[] } {
-  const inPastDay = runs.filter((run) => now.getTime() - Date.parse(run.at) < DAY_MS);
+  const today = dayOf(now, timeZone);
+  const ranToday = runs.filter((run) => dayOf(new Date(run.at), timeZone) === today);
   const chosen = new Map<number, Set<JobSource>>();
   const skipped: SkippedSource[] = [];
 
   for (const source of sources) {
     const cap = capOf(caps, source);
     if (cap === 0) continue;
-    const used = inPastDay.reduce((sum, run) => sum + run.requests.filter((request) => request.source === source).length, 0);
+    const used = ranToday.reduce((sum, run) => sum + run.requests.filter((request) => request.source === source).length, 0);
     const remaining = cap === "all" ? searches.length : Math.max(0, cap - used);
 
     const candidates = searches

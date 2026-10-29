@@ -29,9 +29,9 @@ function capHint(source: JobSource, cap: SourceCap): string | undefined {
 }
 
 /** What the next run would do: which searches go to which providers, then the paused ones. */
-function nextRun(searches: readonly AgentSearch[], sources: readonly JobSource[], caps: Caps, runs: readonly AgentRun[]): string {
+function nextRun(searches: readonly AgentSearch[], sources: readonly JobSource[], caps: Caps, runs: readonly AgentRun[], timeZone: string): string {
   const runnable = runnableSearches(searches);
-  const { requests } = planRequests({ searches: runnable, sources, caps, runs, now: new Date() });
+  const { requests } = planRequests({ searches: runnable, sources, caps, runs, now: new Date(), timeZone });
   // Providers that get the same searches share a sentence.
   const groups: { names: string[]; sources: JobSource[] }[] = [];
   for (const source of sources) {
@@ -53,6 +53,7 @@ export function SourceCaps({
   sources,
   searches,
   runs,
+  timeZone,
 }: {
   initial: Caps;
   /** The providers the agent searches. */
@@ -60,6 +61,8 @@ export function SourceCaps({
   /** Live, so the preview follows edits to the searches. */
   searches: readonly AgentSearch[];
   runs: readonly AgentRun[];
+  /** The user's; a provider's cap resets at their midnight. */
+  timeZone: string;
 }) {
   const track = useTrackSave();
   const [caps, setCaps] = useState(initial);
@@ -100,7 +103,7 @@ export function SourceCaps({
           );
         })}
       </div>
-      <p className="text-meta text-muted">{nextRun(searches, sources, caps, runs)}</p>
+      <p className="text-meta text-muted">{nextRun(searches, sources, caps, runs, timeZone)}</p>
     </Card>
   );
 }

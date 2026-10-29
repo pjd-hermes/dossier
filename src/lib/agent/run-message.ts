@@ -38,7 +38,7 @@ export function searchedSentence(counts: readonly [JobSource, number][], capped:
 
   const usedUp = capped
     .filter((skipped) => !ran.some(([source]) => source === skipped.source))
-    .map((skipped) => `${nameOf(skipped.source)}'s limit of ${skipped.cap} a day is used up until later.`);
+    .map((skipped) => `${nameOf(skipped.source)}'s limit of ${skipped.cap} a day is used up for today.`);
   return [searched, ...usedUp].filter(Boolean).join(" ");
 }
 

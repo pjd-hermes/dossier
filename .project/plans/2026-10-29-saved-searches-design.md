@@ -18,8 +18,8 @@ searches **one** provider and the job agent runs **one** search. After this step
 
 - With JSearch, Adzuna and FreeHire on and three searches saved, one scheduled run searches all three on
   Adzuna and FreeHire, and two on JSearch (default cap); the third gets JSearch first on the next run.
-- JSearch requests made by the agent never exceed its cap in any 24 hours, whether runs are scheduled or
-  Run now.
+- JSearch requests made by the agent never exceed its cap in a calendar day in the user's time zone,
+  whether runs are scheduled or Run now.
 - An existing install upgrades with no action: its one provider stays on, and its one agent search becomes
   the first saved search.
 - Coverage gates (86 % overall, 94 % `src/lib`) and `session-audit.test.ts` still pass.
@@ -97,7 +97,7 @@ Each new unit has one job and can be tested without the screen.
 | Config | `src/lib/job-search/config.ts` (upstream, small) | `JobSearchConfig` gains `sourcesOn: JobSource[]`; `source` stays as Find jobs' provider. `jobSearchView` adds `sourcesOn`. |
 | Usage counter | `src/lib/job-search/usage.ts` (new) | `countRequest(source, now)` and `usageSince(source, days, now)`. Called from `searchPostings`, `postingDetails` and `testSource` in `index.ts` only when the request isn't a cache hit (one line each). |
 | Saved searches | `src/lib/agent/searches.ts` (new) | Schema, `loadAgentSearches()` (with the `agentQuery` derivation), add, update, remove, at most 5. |
-| Request planner | `src/lib/agent/plan.ts` (new, pure) | `planRequests(searches, sources, caps, runs, now)` → ordered `{ source, searchId }[]`, plus `skipped` per source with the reason. |
+| Request planner | `src/lib/agent/plan.ts` (new, pure) | `planRequests(searches, sources, caps, runs, now, timeZone)` → ordered `{ source, searchId }[]`, plus `skipped` per source with the reason. Caps count per calendar day in the user's time zone. |
 | Fair scoring pick | `src/lib/agent/plan.ts` | `pickToScore(freshBySearch, max)`: newest first within each search, then one from each search in turn until `max`. |
 | Agent run | `src/lib/agent/run.ts` (upstream, moderate) | Runs the plan instead of one search; see Data flow. |
 | Settings actions | `src/app/(app)/settings/actions.ts` (upstream, small) + `src/app/(app)/settings/provider-actions.ts` (new) + `src/app/(app)/agent/search-actions.ts` (new) | Provider on/off and per-provider test; saved-search CRUD and caps (next to the existing agent actions). Every action through `action()`. |
@@ -115,8 +115,9 @@ Each new unit has one job and can be tested without the screen.
    is missing is **skipped with a note**, not a stop.
 2. The 3-runs-a-day limit and the Run now hour are unchanged.
 3. `planRequests`:
-   - For each provider, `remaining = cap − requests to it in agent runs of the past 24 h` (`"all"` means
-     the number of enabled searches; 0 skips it).
+   - For each provider, `remaining = cap − requests to it in agent runs earlier the same calendar day in
+     the user's time zone` (`"all"` means the number of enabled searches; 0 skips it). A calendar day, not
+     24 hours, so a scheduled run that starts a few minutes earlier than yesterday's still gets the cap.
    - Order the enabled searches by when they last ran **on that provider** (never first, then oldest),
      ties by their order in the list. Take the first `remaining`.
    - Group the result by search, in list order, so every search gets its first requests before a failing provider can end the run.
@@ -159,7 +160,7 @@ As in the mockups. Notes the mockups don't show:
 
 ## Testing
 
-- Pure unit tests: `planRequests` (caps, "all", 0, turn-taking across runs, the 24 h window, ties,
+- Pure unit tests: `planRequests` (caps, "all", 0, turn-taking across runs, the calendar day in the user's time zone, ties,
   unsupported countries), `pickToScore`, `sourcesOn` and the legacy derivations, usage trimming.
 - DB tests: `run.db.test.ts` for a three-search, three-provider run with a fake adapter per provider,
   one provider failing, Run now after a capped run; settings actions; export/import round trip with the

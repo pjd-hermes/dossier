@@ -21,6 +21,7 @@ const open = (props: Partial<Parameters<typeof SourceCaps>[0]> = {}) =>
       initial={{ JSEARCH: 2 }}
       searches={[search("a", "Product designer"), search("b", "Data analyst")]}
       runs={[]}
+      timeZone="UTC"
       {...props}
     />,
   );
@@ -79,14 +80,21 @@ describe("Searches per provider, each day", () => {
     expect(screen.getByText("Next run: Product designer and Data analyst on Adzuna and FreeHire, and Product designer on JSearch.")).toBeInTheDocument();
   });
 
-  it("follows the runs of the past day, and says which searches are paused", () => {
-    const runs = [{ at: new Date(Date.now() - 3_600_000).toISOString(), manual: false, message: null, requests: [{ source: "JSEARCH" as const, searchId: "a" }] }];
-    open({
-      initial: { JSEARCH: 1 },
-      runs,
-      searches: [search("a", "Product designer"), search("b", "Data analyst"), search("c", "Writer", { enabled: false })],
-    });
-    expect(screen.getByText("Next run: Product designer and Data analyst on Adzuna and FreeHire. Writer is paused.")).toBeInTheDocument();
+  it("follows today's runs in the user's time zone, and says which searches are paused", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-29T12:00:00Z"));
+    // 06:00 UTC: earlier today in UTC, but yesterday evening in Los Angeles.
+    const runs = [{ at: "2026-10-29T06:00:00Z", manual: false, message: null, requests: [{ source: "JSEARCH" as const, searchId: "a" }] }];
+    const searches = [search("a", "Product designer"), search("b", "Data analyst"), search("c", "Writer", { enabled: false })];
+    try {
+      const { unmount } = open({ initial: { JSEARCH: 1 }, runs, searches });
+      expect(screen.getByText("Next run: Product designer and Data analyst on Adzuna and FreeHire. Writer is paused.")).toBeInTheDocument();
+      unmount();
+      open({ initial: { JSEARCH: 1 }, runs, searches, timeZone: "America/Los_Angeles" });
+      expect(screen.getByText("Next run: Product designer and Data analyst on Adzuna and FreeHire, and Data analyst on JSearch. Writer is paused.")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("says when nothing will be searched", () => {

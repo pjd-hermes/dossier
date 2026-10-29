@@ -104,7 +104,7 @@ export function AgentSection({
 
       <SavedSearches initial={initial.searches} sources={sources} countries={countries} onChange={setSearches} />
 
-      <SourceCaps initial={initial.caps} sources={sources} searches={searches} runs={runs} />
+      <SourceCaps initial={initial.caps} sources={sources} searches={searches} runs={runs} timeZone={timeZone} />
 
       <Card padding="none" className="grid gap-x-[18px] gap-y-5 px-7 py-[26px] sm:grid-cols-2">
         <Select label="Runs after" hint={`Your time (${timeZone})`} value={String(settings.hour)} onChange={(event) => change({ hour: Number(event.target.value) })}>
