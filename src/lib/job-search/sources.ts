@@ -14,6 +14,8 @@ export type JobSearchSettingsView = {
   arbeitsagentur: { offered: boolean; acceptedAt: string | null };
   /** The FreeHire it searches: "freehire.me", or a self-hosted one's host (DOSSIER_FREEHIRE_URL). */
   freehire: { host: string };
+  /** Requests Dossier sent to each provider in the past 30 days. */
+  usage: Partial<Record<JobSource, number>>;
 };
 
 export const JOB_KEY_UNREADABLE = "Your saved key can't be read. Please enter it again.";

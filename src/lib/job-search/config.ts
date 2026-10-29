@@ -8,6 +8,7 @@ import { loadSettings } from "@/lib/settings-data";
 import type { RequestContext, SourceCredentials } from "./adapter";
 import { JobSearchError, jobSearchError } from "./errors";
 import { JOB_SOURCES, type JobSource, type JSearchHost } from "./search";
+import { requestsInPastDays, SHOWN_DAYS, type JobSourceUsage } from "./usage";
 import { ARBEITSAGENTUR_NOTE, FREEHIRE_URL, SOURCE_INFO, type JobKeyState, type JobSearchSettingsView } from "./sources";
 
 // Which job source to search, and with which key (E14-4): what's saved in
@@ -105,8 +106,9 @@ export function arbeitsagenturStartupNotice(config: JobSearchConfig): string | n
   return `Job search: DOSSIER_JOBS_SOURCE chooses the Bundesagentur für Arbeit. ${ARBEITSAGENTUR_NOTE}${waiting}`;
 }
 
-/** What Settings → Job search shows: the source and the keys' states, never the keys. */
-export function jobSearchView(config: JobSearchConfig): JobSearchSettingsView {
+/** What Settings → Job search shows: the source and the keys' states, never the keys, and the requests sent in the past 30 days. */
+export function jobSearchView(config: JobSearchConfig, usage: JobSourceUsage = {}, now = new Date()): JobSearchSettingsView {
+  const used = JOB_SOURCES.map((name) => [name, requestsInPastDays(usage, name, SHOWN_DAYS, now)] as const).filter(([, count]) => count > 0);
   return {
     source: config.source ?? "OFF",
     sourcesOn: config.sourcesOn,
@@ -114,6 +116,7 @@ export function jobSearchView(config: JobSearchConfig): JobSearchSettingsView {
     adzuna: { appId: config.adzuna.appId, keyState: config.adzuna.keyState },
     arbeitsagentur: config.arbeitsagentur,
     freehire: { host: new URL(config.freehire.url).host },
+    usage: Object.fromEntries(used),
   };
 }
 

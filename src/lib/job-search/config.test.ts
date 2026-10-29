@@ -29,6 +29,7 @@ describe("resolveJobSearchConfig", () => {
       adzuna: { appId: "", keyState: "none" },
       arbeitsagentur: { offered: true, acceptedAt: null },
       freehire: { host: "freehire.me" },
+      usage: {},
     });
   });
 
@@ -184,6 +185,17 @@ describe("sourcesOn", () => {
   it("leaves out the Bundesagentur when the server doesn't offer it", () => {
     const saved = { ...nothingSaved, jobSourcesOn: ["ARBEITSAGENTUR" as const, "FREEHIRE" as const] };
     expect(resolveJobSearchConfig(saved, { DOSSIER_JOBS_ARBEITSAGENTUR: "off" }).sourcesOn).toEqual(["FREEHIRE"]);
+  });
+
+  it("lets a saved list win over a saved Off", () => {
+    const config = resolveJobSearchConfig({ ...nothingSaved, jobSource: "OFF", jobSourcesOn: ["FREEHIRE"] }, noEnv);
+    expect(config).toMatchObject({ sourcesOn: ["FREEHIRE"], source: "FREEHIRE" });
+  });
+
+  it("reaches the settings view, with the past 30 days of requests", () => {
+    const now = new Date("2026-10-29T12:00:00Z");
+    const usage = { JSEARCH: { "2026-10-29": 3, "2026-10-01": 2, "2026-09-29": 40 }, ADZUNA: { "2026-09-01": 5 } };
+    expect(jobSearchView(resolveJobSearchConfig(nothingSaved, noEnv), usage, now).usage).toEqual({ JSEARCH: 5 });
   });
 
   it("reaches the settings view", () => {

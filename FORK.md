@@ -40,3 +40,12 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `src/lib/data-export.db.test.ts` | The install-settings case covers `jobSourceUsage` | Saved searches, task 2 |
 | `src/lib/job-search/index.ts` | A `countRequest` call before each request sent to a provider | Saved searches, task 2 |
 | `src/lib/job-search/index.test.ts` | Tests for the request counting | Saved searches, task 2 |
+| `src/lib/job-search/config.ts` | `jobSearchView(config, usage, now)` adds the past 30 days of requests | Saved searches, task 3 |
+| `src/lib/job-search/config.test.ts` | Tests for a saved list beating a saved Off, and for `usage` | Saved searches, task 3 |
+| `src/lib/job-search/sources.ts` | `usage` in `JobSearchSettingsView` | Saved searches, task 3 |
+| `src/app/(app)/settings/actions.ts` | `loadView` passes the saved usage | Saved searches, task 3 |
+| `src/app/(app)/settings/actions.db.test.ts` | The view it expects gains `usage` | Saved searches, task 3 |
+| `src/app/(app)/settings/page.tsx` | The initial job search view gets the saved usage | Saved searches, task 3 |
+| `src/app/(app)/settings/job-search-section.tsx` | A card per provider, each with a switch, its keys and its own test, replacing the radio choice | Saved searches, task 3 |
+| `src/app/(app)/settings/job-search-section.test.tsx` | Tests for the cards | Saved searches, task 3 |
+| `e2e/find-jobs.spec.ts` | The Settings tests use the providers' switches and cards | Saved searches, task 3 |

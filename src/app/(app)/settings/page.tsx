@@ -51,7 +51,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           <AiBehaviour initial={{ creativity: settings.creativity, strict: settings.strict, showDiff: settings.showDiff }} />
         </>
       ) : section === "jobs" ? (
-        <JobSearchSection initial={jobSearchView(await loadJobSearchConfig())} />
+        <JobSearchSection initial={jobSearchView(await loadJobSearchConfig(), settings.jobSourceUsage)} />
       ) : section === "agent" ? (
         <AgentSection
           initial={{

@@ -161,6 +161,7 @@ describe("job search settings (E14-4)", () => {
         adzuna: { appId: "", keyState: "none" },
         arbeitsagentur: { offered: true, acceptedAt: null },
         freehire: { host: "freehire.me" },
+        usage: {},
       },
     });
     await saveJobSource({ source: "OFF" });

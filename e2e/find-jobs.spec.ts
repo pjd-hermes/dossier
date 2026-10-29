@@ -83,10 +83,11 @@ test("says when nothing was found", async ({ page }) => {
 
 test("tests the connection in Settings → Job search", async ({ page }) => {
   await page.goto("/settings?section=jobs");
-  await expect(page.getByRole("radio", { name: "JSearch" })).toBeChecked();
+  await expect(page.getByRole("switch", { name: "Use JSearch" })).toBeChecked();
   await expect(page.getByLabel("API key")).toHaveAttribute("placeholder", "Using DOSSIER_JSEARCH_KEY · type one to save it here");
-  await page.getByRole("button", { name: "Test connection" }).click();
-  await expect(page.getByText(/^Connected · JSearch answered in/)).toBeVisible();
+  const jsearch = page.getByRole("group", { name: "JSearch" });
+  await jsearch.getByRole("button", { name: "Test connection" }).click();
+  await expect(jsearch.getByText(/^Connected · JSearch answered in/)).toBeVisible();
 });
 
 test("scores a posting against the profile, and keeps the score (#208)", async ({ page }) => {
@@ -114,11 +115,14 @@ test("scores a posting against the profile, and keeps the score (#208)", async (
 
 test("searches FreeHire, which needs no key and has no radius", async ({ page }) => {
   const chosen = async (source: string) =>
-    expect.poll(async () => (await sql<{ value: string }>(`SELECT value FROM "Setting" WHERE key = 'jobSource'`))[0]?.value).toContain(source);
+    expect.poll(async () => (await sql<{ value: string }>(`SELECT value FROM "Setting" WHERE key = 'jobSourcesOn'`))[0]?.value).toContain(source);
   await page.goto("/settings?section=jobs");
-  await page.getByRole("radio", { name: "FreeHire" }).click();
-  await expect(page.getByText("No key needed. Dossier searches FreeHire's public catalogue at freehire.me.")).toBeVisible();
+  // Find jobs searches the first provider that's on, so JSearch goes off while FreeHire goes on.
+  await page.getByRole("switch", { name: "Use FreeHire" }).click();
   await chosen("FREEHIRE");
+  await page.getByRole("switch", { name: "Use JSearch" }).click();
+  await expect(page.getByText("No key needed. Dossier searches FreeHire's public catalogue at freehire.me.")).toBeVisible();
+  await expect.poll(async () => (await sql<{ value: string }>(`SELECT value FROM "Setting" WHERE key = 'jobSourcesOn'`))[0]?.value).toBe('["FREEHIRE"]');
 
   await page.goto("/jobs?q=product+designer&where=Rotterdam&country=nl");
   const form = page.getByRole("search", { name: "Search postings" });
@@ -133,6 +137,8 @@ test("searches FreeHire, which needs no key and has no radius", async ({ page })
 
   // Back to JSearch, as the environment sets it, for the tests after.
   await page.goto("/settings?section=jobs");
-  await page.getByRole("radio", { name: "JSearch" }).click();
-  await chosen("JSEARCH");
+  await page.getByRole("switch", { name: "Use JSearch" }).click();
+  await expect(page.getByLabel("API key")).toBeVisible();
+  await page.getByRole("switch", { name: "Use FreeHire" }).click();
+  await expect.poll(async () => (await sql<{ value: string }>(`SELECT value FROM "Setting" WHERE key = 'jobSourcesOn'`))[0]?.value).toBe('["JSEARCH"]');
 });
