@@ -552,9 +552,6 @@ rewrite their setup to a single saved search on JSearch.
     the next-run preview from `planRequests` with `now = new Date()`: `Next run: <names> on all <n>.` when
     nothing is capped, else `Next run: <names> on Adzuna and FreeHire, and <names> on JSearch.`; paused searches
     add ` <name> is paused.`
-  - Query help: next to the "What to look for" field in each saved search, an info button (`aria-label="About searching"`)
-    opening a tooltip/popover with this exact text: `Use plain words, like a job title or a key skill, e.g. database administrator. One kind of job per search; add another saved search for alternatives like software developer.`
-    No claim about OR or other operators: providers treat the text differently and none is verified. Test: the button is present and its text is shown on activation (keyboard reachable).
   - Intro copy (exact): `Once a day it runs each of your saved searches on every provider that's on, scores the new postings against your profile, and keeps the best on the Agent screen. It never sends or applies.`
   - Footer copy: replace `One search a day, and at most three in any 24 hours.` with
     `One run a day, and at most three in any 24 hours.`; the rest unchanged except "the job source only gets
