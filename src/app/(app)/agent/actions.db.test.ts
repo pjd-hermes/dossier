@@ -24,7 +24,7 @@ vi.mock("@/lib/jobs/runner", async (importOriginal) => ({
 const setup = vi.hoisted(() => ({ ai: true, source: "JSEARCH" as "JSEARCH" | null }));
 vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => setup.ai }));
 vi.mock("@/lib/job-search/config", () => ({
-  loadJobSearchConfig: async () => ({ source: setup.source, saved: true, jsearch: { key: "k", host: "openwebninja", keyState: "set" }, adzuna: { appId: "", key: null, keyState: "none" } }),
+  loadJobSearchConfig: async () => ({ sourcesOn: setup.source ? [setup.source] : [], source: setup.source, saved: true, jsearch: { key: "k", host: "openwebninja", keyState: "set" }, adzuna: { appId: "", key: null, keyState: "none" } }),
   credentialsFor: () => ({ key: "k", host: "openwebninja" }),
   requestContext: () => ({}),
 }));
@@ -59,13 +59,13 @@ describe("Run now (E16-4)", () => {
     await saveSettings({ agentEnabled: false });
     expect(await runAgentNow({})).toEqual({ ok: false, error: "Turn the job agent on in Settings → Job agent first." });
     await saveSettings({ agentEnabled: true, agentQuery: { ...query, keywords: "" } });
-    expect(await runAgentNow({})).toMatchObject({ ok: false, error: "Add what to look for in Settings → Job agent first." });
+    expect(await runAgentNow({})).toMatchObject({ ok: false, error: "Add a saved search in Settings → Job agent first." });
     await saveSettings({ agentQuery: query });
+    setup.source = null;
+    expect(await runAgentNow({})).toMatchObject({ ok: false, error: "Turn on JSearch, Adzuna or FreeHire in Settings → Job search first." });
+    setup.source = "JSEARCH";
     setup.ai = false;
     expect(await runAgentNow({})).toMatchObject({ ok: false, error: "Choose an AI provider in Settings → AI provider first." });
-    setup.ai = true;
-    setup.source = null;
-    expect(await runAgentNow({})).toMatchObject({ ok: false, error: "Choose a job source in Settings → Job search first." });
   });
 
   it("waits an hour after the previous run, and keeps to 3 a day", async () => {

@@ -82,7 +82,7 @@ const posting: FoundPosting = {
   complete: true,
 };
 const context = (abort?: AbortController): JobContext => ({ id: "draft-job", step: async () => {}, signal: (abort ?? new AbortController()).signal });
-const candidate = (found = posting) => prisma().agentCandidate.create({ data: candidateData(found, { score: 91, reasons: ["Figma"], redFlags: [] }) });
+const candidate = (found = posting) => prisma().agentCandidate.create({ data: candidateData(found, { score: 91, reasons: ["Figma"], redFlags: [] }, { id: "design", name: "Product design" }) });
 
 beforeEach(async () => {
   await resetDatabase(prisma());

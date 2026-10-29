@@ -72,3 +72,12 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `src/lib/data-export.ts` | The `agentCandidate` export schema gains `searchId` and `searchName`, with defaults for older files | Saved searches, task 7 |
 | `src/lib/data-import.db.test.ts` | The candidate round trip covers the search tag and files without it | Saved searches, task 7 |
 | `src/app/(app)/settings/delete-everything.db.test.ts` | The candidate it deletes carries a search tag | Saved searches, task 7 |
+| `src/lib/agent/run.ts` | `agentSetupProblem` takes the settings and config; `runAgentScan` runs every saved search on every provider through the planner; `agentQueryReady` removed | Saved searches, task 8 |
+| `src/lib/agent/candidates.ts` | `candidateData` takes the saved search and stores `searchId`/`searchName` | Saved searches, task 8 |
+| `src/lib/agent/view.ts` | Calls `agentSetupProblem` with the settings and config | Saved searches, task 8 |
+| `src/app/(app)/agent/actions.ts` | `searchReady` in place of `agentQueryReady`; Run now checks setup with the config | Saved searches, task 8 |
+| `src/lib/agent/run.db.test.ts` | A fake per provider; tests for several searches and providers, caps, skipped and failing providers | Saved searches, task 8 |
+| `src/lib/agent/candidates.db.test.ts` | `candidateData` with a search; test for the search tag | Saved searches, task 8 |
+| `src/lib/agent/draft.db.test.ts` | `candidateData` with a search | Saved searches, task 8 |
+| `src/lib/agent/view.db.test.ts` | Config fake gains `sourcesOn`; the new setup message | Saved searches, task 8 |
+| `src/app/(app)/agent/actions.db.test.ts` | Config fake gains `sourcesOn`; the new setup messages and order | Saved searches, task 8 |

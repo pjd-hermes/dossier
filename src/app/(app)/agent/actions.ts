@@ -6,9 +6,11 @@ import { z } from "zod";
 import { AgentCandidateStatus } from "@/generated/prisma/enums";
 import { agentDraftJob, approveCandidate, dismissCandidate, draftJobKey, restoreCandidate } from "@/lib/agent/draft";
 import { AGENT_JOB_KEY, agentScanJob } from "@/lib/agent/jobs";
-import { agentQueryReady, agentSetupProblem } from "@/lib/agent/run";
+import { agentSetupProblem } from "@/lib/agent/run";
 import { runLimitProblem } from "@/lib/agent/runs";
+import { searchReady } from "@/lib/agent/searches";
 import { action, ActionError } from "@/lib/action";
+import { loadJobSearchConfig } from "@/lib/job-search/config";
 import { safeLink, searchQuerySchema } from "@/lib/job-search/search";
 import { findUnfinishedJobs, startJob } from "@/lib/jobs/runner";
 import { prisma } from "@/lib/prisma";
@@ -34,7 +36,7 @@ export const saveAgentSettings = action(
   async (changes) => {
     const settings = await loadSettings();
     const query = changes.query ?? settings.agentQuery;
-    if (changes.enabled && !agentQueryReady(query)) {
+    if (changes.enabled && !searchReady(query)) {
       throw new ActionError(query.keywords.trim() ? "Choose a country for the search before turning the agent on." : "Type what the agent should look for before turning it on.");
     }
     await saveSettings({
@@ -59,7 +61,7 @@ export const saveAgentSettings = action(
 export const runAgentNow = action(z.object({}), async () => {
   const settings = await loadSettings();
   if (!settings.agentEnabled) throw new ActionError("Turn the job agent on in Settings → Job agent first.");
-  const setup = await agentSetupProblem(settings.agentQuery);
+  const setup = await agentSetupProblem(settings, await loadJobSearchConfig());
   if (setup) throw new ActionError(setup);
   const [unfinished] = await findUnfinishedJobs(AGENT_JOB_KEY);
   if (unfinished) return { jobId: unfinished.id, reused: true };

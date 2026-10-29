@@ -25,6 +25,7 @@ const posting: FoundPosting = {
   complete: true,
 };
 const score = { score: 82, reasons: ["Python matches"], redFlags: [] };
+const search = { id: "data", name: "Data science" };
 const duplicate = (error: unknown) => error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 
 describe("the dedupe key (E16-1)", () => {
@@ -46,22 +47,27 @@ describe("the dedupe key (E16-1)", () => {
 
 describe("agent candidates (E16-1)", () => {
   it("are unique by source and the source's id, and by dedupe key", async () => {
-    await db.agentCandidate.create({ data: candidateData(posting, score) });
-    await expect(db.agentCandidate.create({ data: { ...candidateData(posting, score), dedupeKey: "other" } })).rejects.toSatisfy(duplicate);
-    await expect(db.agentCandidate.create({ data: { ...candidateData(posting, score), externalId: "job-2" } })).rejects.toSatisfy(duplicate);
+    await db.agentCandidate.create({ data: candidateData(posting, score, search) });
+    await expect(db.agentCandidate.create({ data: { ...candidateData(posting, score, search), dedupeKey: "other" } })).rejects.toSatisfy(duplicate);
+    await expect(db.agentCandidate.create({ data: { ...candidateData(posting, score, search), externalId: "job-2" } })).rejects.toSatisfy(duplicate);
   });
 
   it("have at most one draft each, and outlive it", async () => {
     const application = await db.application.create({ data: { title: "Data Scientist · Ledgerly", origin: "AGENT", agentScore: 82, awaitingReview: true } });
     const linked = (data: Prisma.AgentCandidateCreateInput): Prisma.AgentCandidateUncheckedCreateInput => ({ ...data, applicationId: application.id });
-    const candidate = await db.agentCandidate.create({ data: linked(candidateData(posting, score)) });
-    await expect(db.agentCandidate.create({ data: linked(candidateData({ ...posting, externalId: "job-2", url: "" }, score)) })).rejects.toSatisfy(duplicate);
+    const candidate = await db.agentCandidate.create({ data: linked(candidateData(posting, score, search)) });
+    await expect(db.agentCandidate.create({ data: linked(candidateData({ ...posting, externalId: "job-2", url: "" }, score, search)) })).rejects.toSatisfy(duplicate);
     await db.application.delete({ where: { id: application.id } });
     expect(await db.agentCandidate.findUniqueOrThrow({ where: { id: candidate.id } })).toMatchObject({ applicationId: null, status: "SCORED" });
   });
 
+  it("keep the saved search that found them", async () => {
+    const candidate = await db.agentCandidate.create({ data: candidateData(posting, score, search) });
+    expect(candidate).toMatchObject({ searchId: "data", searchName: "Data science" });
+  });
+
   it("keep only what dedupe needs once dismissed", async () => {
-    const candidate = await db.agentCandidate.create({ data: candidateData(posting, { ...score, redFlags: ["German required"] }) });
+    const candidate = await db.agentCandidate.create({ data: candidateData(posting, { ...score, redFlags: ["German required"] }, search) });
     expect(stringsOf(candidate.reasons)).toEqual(["Python matches"]);
     const trimmed = await db.agentCandidate.update({ where: { id: candidate.id }, data: { status: "DISMISSED", ...DISMISSED_TRIM } });
     expect(trimmed).toMatchObject({ source: "JSEARCH", externalId: "job-1", title: "Data Scientist", company: "Ledgerly", dedupeKey: candidate.dedupeKey });

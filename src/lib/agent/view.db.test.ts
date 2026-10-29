@@ -14,7 +14,7 @@ vi.mock("@/lib/prisma", async () => {
 vi.mock("@/lib/time-zone", () => ({ lastKnownTimeZone: async () => "Europe/Berlin" }));
 vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => true }));
 vi.mock("@/lib/job-search/config", () => ({
-  loadJobSearchConfig: async () => ({ source: "JSEARCH", saved: true, jsearch: { key: "k", host: "openwebninja", keyState: "set" }, adzuna: { appId: "", key: null, keyState: "none" } }),
+  loadJobSearchConfig: async () => ({ sourcesOn: ["JSEARCH"], source: "JSEARCH", saved: true, jsearch: { key: "k", host: "openwebninja", keyState: "set" }, adzuna: { appId: "", key: null, keyState: "none" } }),
   credentialsFor: () => ({ key: "k", host: "openwebninja" }),
 }));
 
@@ -69,7 +69,7 @@ describe("the Agent screen's data (E16-6)", () => {
     expect(await loadAgentView(now)).toMatchObject({
       enabled: false,
       search: null,
-      setupProblem: "Add what to look for in Settings → Job agent first.",
+      setupProblem: "Add a saved search in Settings → Job agent first.",
       setupSection: "agent",
       limitReached: true,
       nextRun: null,

@@ -47,7 +47,7 @@ export type AgentView = {
   maxDrafts: number;
   /** "Data scientist in Berlin (25 km), Germany · via JSearch", or null without a search. */
   search: string | null;
-  /** Why it can't run: no search, AI provider, source or key; null when it's set up. */
+  /** Why it can't run: no saved search, provider or AI provider; null when it's set up. */
   setupProblem: string | null;
   /** Which settings section fixes it. */
   setupSection: "agent" | "ai" | "jobs" | null;
@@ -106,7 +106,7 @@ export async function loadAgentView(now = new Date()): Promise<AgentView> {
   const search = query.keywords.trim()
     ? `${describeSearch(query, countryName(query.country) || query.country.toUpperCase(), source)}${source ? ` · via ${SOURCE_INFO[source].name}` : ""}`
     : null;
-  const setupProblem = await agentSetupProblem(query);
+  const setupProblem = await agentSetupProblem(settings, config);
 
   const view = (candidate: (typeof candidates)[number]): AgentCandidateView => ({
     id: candidate.id,
