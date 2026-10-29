@@ -37,6 +37,9 @@ https://claude.ai/artifact/E8uhVJUJiWec5gxv1cx838. Read both before starting a t
 - Commands: `docker/bin/yarn <cmd>` on PJ's machine. In the cloud container use `/tmp/claude-0/bin/dyarn <cmd>`
   (Node 24, Yarn 4.18.1, local Postgres 16; see "Cloud container toolchain" at the end). Never claim a run that
   didn't happen.
+- The repository is public. No personal data in any file, test fixture or commit message: no real names
+  beyond "PJ", no addresses, emails, phone numbers, IPs or hostnames of PJ's machines. Use made-up sample
+  data ("Jane Doe", "Rotterdam", "example.com") as the existing tests do. Check the diff before each push.
 - Commit messages: imperative, sentence case, like the existing history; end with the session's attribution
   lines.
 
