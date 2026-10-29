@@ -162,8 +162,8 @@ export const settingsSchema = z.object({
   adzunaKeyEnc: z.string().nullable().catch(null),
   /** When "I understand" was ticked under the Bundesagentur für Arbeit's note (#223); its searches wait for it. */
   arbeitsagenturAcceptedAt: z.iso.datetime().nullable().catch(null),
-  // Job agent (E16): one search, run once a day. Off until it's turned on.
-  // It asks the source in Settings → Job search, with its key.
+  // Job agent (E16): the saved searches, run once a day. Off until it's turned on.
+  // It asks the providers that are on in Settings → Job search, with their keys.
   agentEnabled: flag(false),
   /** The search it runs, as Find jobs asks it; it needs keywords and a country to run. */
   agentQuery: json(searchQuerySchema).catch(EMPTY_QUERY),

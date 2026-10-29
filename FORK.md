@@ -93,3 +93,9 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `src/app/(app)/agent/agent-screen.test.tsx` | Tests for the chips and the filter | Saved searches, task 10 |
 | `src/lib/agent/run.ts` | Sends a provider the search's query alone, so Find jobs' cache can answer it; stops sending requests once the run is cancelled | Saved searches, task 11 |
 | `src/lib/agent/run.db.test.ts` | Tests for the query a provider is sent and for cancelling between requests | Saved searches, task 11 |
+| `DEVELOPMENT.md` | Job search and Job agent sections: several providers on, request counts, saved searches, caps per provider, `requests` on each run | Saved searches, task 11 |
+| `README.md` | The job agent runs the saved searches on the providers that are on | Saved searches, task 11 |
+| `src/lib/settings.ts` | The job agent comment names the saved searches and the providers that are on | Saved searches, task 11 |
+| `src/lib/agent/jobs.ts` | The `agent-scan` comment says what a run sends now | Saved searches, task 11 |
+| `src/lib/job-search/search.ts` | The `JOB_SOURCES` comment: several can be on | Saved searches, task 11 |
+| `src/lib/job-search/find.ts` | The `askSource` comment names Find jobs' provider | Saved searches, task 11 |
