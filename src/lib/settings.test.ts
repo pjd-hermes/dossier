@@ -57,6 +57,7 @@ describe("stored settings", () => {
       educationOrder: "date",
       backupProblem: null,
       jobSource: null,
+      jobSourcesOn: null,
       jsearchKeyEnc: null,
       jsearchHost: "openwebninja",
       adzunaAppId: null,
@@ -168,5 +169,18 @@ describe("page limits (SET-9)", () => {
   it("counts the pages a resume may have", () => {
     expect([maxPages("1"), maxPages("2"), maxPages("none")]).toEqual([1, 2, null]);
     expect([pagesInWords(1), pagesInWords(2)]).toEqual(["one page", "two pages"]);
+  });
+});
+
+describe("the job providers that are on", () => {
+  const read = (value: string) => settingsFromRows([{ key: "jobSourcesOn", value }]).jobSourcesOn;
+
+  it("reads a list of providers", () => {
+    expect(read('["JSEARCH"]')).toEqual(["JSEARCH"]);
+  });
+
+  it("falls back to null for nonsense or an unknown provider", () => {
+    expect(read("nonsense")).toBeNull();
+    expect(read('["NOPE"]')).toBeNull();
   });
 });

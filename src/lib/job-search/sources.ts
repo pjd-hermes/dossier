@@ -6,6 +6,8 @@ export type JobKeyState = "none" | "set" | "unreadable" | "env";
 /** What the Job search section starts from (E14-4). */
 export type JobSearchSettingsView = {
   source: JobSource | "OFF";
+  /** The providers that are on. */
+  sourcesOn: JobSource[];
   jsearch: { host: JSearchHost; keyState: JobKeyState };
   adzuna: { appId: string; keyState: JobKeyState };
   /** Whether this server offers the Bundesagentur für Arbeit, and when its note was accepted (#223). */

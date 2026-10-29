@@ -8,6 +8,7 @@ vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
 
 const nothingSaved = {
   jobSource: null,
+  jobSourcesOn: null,
   jsearchKeyEnc: null,
   jsearchHost: "openwebninja" as const,
   adzunaAppId: null,
@@ -23,6 +24,7 @@ describe("resolveJobSearchConfig", () => {
     expect(config).toMatchObject({ source: null, saved: false, jsearch: { key: null, keyState: "none" }, adzuna: { appId: "", key: null } });
     expect(jobSearchView(config)).toEqual({
       source: "OFF",
+      sourcesOn: [],
       jsearch: { host: "openwebninja", keyState: "none" },
       adzuna: { appId: "", keyState: "none" },
       arbeitsagentur: { offered: true, acceptedAt: null },
@@ -50,6 +52,7 @@ describe("resolveJobSearchConfig", () => {
   it("prefers what's saved, Off included, and decrypts saved keys", () => {
     const saved = {
       jobSource: "ADZUNA" as const,
+      jobSourcesOn: null,
       jsearchKeyEnc: encryptSecret(JOB_SOURCE_KEY, "ak_saved"),
       jsearchHost: "openwebninja" as const,
       adzunaAppId: "app-saved",
@@ -153,5 +156,38 @@ describe("FreeHire from the environment", () => {
     const own = resolveJobSearchConfig(nothingSaved, { DOSSIER_FREEHIRE_URL: "https://jobs.example:8443" });
     expect(own.freehire).toEqual({ url: "https://jobs.example:8443" });
     expect(jobSearchView(own).freehire).toEqual({ host: "jobs.example:8443" });
+  });
+});
+
+describe("sourcesOn", () => {
+  it("is the one chosen source while nothing else is saved", () => {
+    expect(resolveJobSearchConfig({ ...nothingSaved, jobSource: "JSEARCH" }, noEnv)).toMatchObject({ sourcesOn: ["JSEARCH"], source: "JSEARCH" });
+  });
+
+  it("follows DOSSIER_JOBS_SOURCE when nothing is saved", () => {
+    expect(resolveJobSearchConfig(nothingSaved, { DOSSIER_JOBS_SOURCE: "adzuna" }).sourcesOn).toEqual(["ADZUNA"]);
+  });
+
+  it("is empty while job search is off", () => {
+    expect(resolveJobSearchConfig({ ...nothingSaved, jobSource: "OFF" }, noEnv)).toMatchObject({ sourcesOn: [], source: null });
+  });
+
+  it("keeps the saved list in provider order, without duplicates, and falls back from a provider that is off", () => {
+    const config = resolveJobSearchConfig({ ...nothingSaved, jobSource: "ADZUNA", jobSourcesOn: ["FREEHIRE", "JSEARCH", "JSEARCH"] }, noEnv);
+    expect(config).toMatchObject({ sourcesOn: ["JSEARCH", "FREEHIRE"], source: "JSEARCH" });
+  });
+
+  it("keeps Find jobs' provider when it is on", () => {
+    expect(resolveJobSearchConfig({ ...nothingSaved, jobSource: "FREEHIRE", jobSourcesOn: ["JSEARCH", "FREEHIRE"] }, noEnv).source).toBe("FREEHIRE");
+  });
+
+  it("leaves out the Bundesagentur when the server doesn't offer it", () => {
+    const saved = { ...nothingSaved, jobSourcesOn: ["ARBEITSAGENTUR" as const, "FREEHIRE" as const] };
+    expect(resolveJobSearchConfig(saved, { DOSSIER_JOBS_ARBEITSAGENTUR: "off" }).sourcesOn).toEqual(["FREEHIRE"]);
+  });
+
+  it("reaches the settings view", () => {
+    const config = resolveJobSearchConfig({ ...nothingSaved, jobSourcesOn: ["ADZUNA", "FREEHIRE"] }, noEnv);
+    expect(jobSearchView(config).sourcesOn).toEqual(config.sourcesOn);
   });
 });

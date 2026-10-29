@@ -1,0 +1,38 @@
+# This fork
+
+## What this fork is
+
+PJ's own copy of [AienTech/dossier](https://github.com/AienTech/dossier), used for PJ's job search. It carries
+changes that are not meant for upstream and are not offered back.
+
+## Syncing upstream
+
+1. `git fetch upstream --tags`
+2. Once per clone: `git config rerere.enabled true`, so a conflict resolved once stays resolved.
+3. Merge the release tag into a branch: `git switch -c sync/<tag>` then `git merge <tag>`.
+4. Test with `docker/bin/yarn test` (and `typecheck`, `lint`), fix what the merge broke, then merge the branch.
+
+Never rebase: the fork's history stays as it is, and each upstream release arrives as one merge.
+
+## Rules
+
+1. New logic goes in new files. Upstream files get thin calls into them; no renames, no reformatting.
+2. Settings JSON before new tables. Only the search tag touches Prisma.
+3. Every upstream file changed is listed below with one line on why.
+4. Merge upstream release tags, never rebase.
+
+## Upstream files we change
+
+| File | Why | Since |
+|---|---|---|
+| `src/lib/env.ts` | The OpenCode Go AI provider in `AI_PROVIDERS` | 1.10.0 merge (70b25f1) |
+| `src/lib/ai/providers.live.test.ts` | A live check for OpenCode Go beside upstream's Anthropic one | 1.10.0 merge (70b25f1) |
+| `DEVELOPMENT.md` | The OpenCode Go live check, beside the Anthropic one | 1.10.0 merge (70b25f1) |
+| `package.json`, `yarn.lock` | The step 1 dependency patch; upstream's versions taken in the merge | 1.10.0 merge (70b25f1) |
+| `src/lib/settings.ts` | The `jobSourcesOn` setting: several job providers on at once | Saved searches, task 1 |
+| `src/lib/settings.test.ts` | Tests for `jobSourcesOn` | Saved searches, task 1 |
+| `src/lib/job-search/config.ts` | `sourcesOn` in the job search config and its view; `source` now means Find jobs' provider | Saved searches, task 1 |
+| `src/lib/job-search/config.test.ts` | Tests for `sourcesOn` | Saved searches, task 1 |
+| `src/lib/job-search/sources.ts` | `sourcesOn` in `JobSearchSettingsView` | Saved searches, task 1 |
+| `src/app/(app)/settings/job-search-section.test.tsx` | The view fixture gains `sourcesOn` | Saved searches, task 1 |
+| `src/app/(app)/settings/actions.db.test.ts` | The view it expects after saving a source gains `sourcesOn` | Saved searches, task 1 |
