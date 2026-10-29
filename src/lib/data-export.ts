@@ -251,6 +251,8 @@ const agentCandidate = z.object({
   error: text.nullable(),
   applicationId: text.nullable(),
   dedupeKey: text,
+  searchId: text.nullable().default(null),
+  searchName: text.default(""),
   createdAt: date,
   updatedAt: date,
 });

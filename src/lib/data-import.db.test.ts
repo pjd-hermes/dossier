@@ -167,7 +167,7 @@ describe("importExport (E10-6)", () => {
   it("restores the job agent's candidates and drafts, so what it saw stays seen (E16)", async () => {
     const draft = await prisma().application.create({ data: { title: "Agent draft", origin: "AGENT", agentScore: 88, awaitingReview: true } });
     await prisma().agentCandidate.create({
-      data: { source: "JSEARCH", externalId: "job-1", title: "Data Scientist", score: 88, reasons: ["Python"], status: "DRAFTED", applicationId: draft.id, dedupeKey: "key-1" },
+      data: { source: "JSEARCH", externalId: "job-1", title: "Data Scientist", score: 88, reasons: ["Python"], status: "DRAFTED", applicationId: draft.id, dedupeKey: "key-1", searchId: "s1", searchName: "Database Admin" },
     });
     await prisma().agentCandidate.create({ data: { source: "ADZUNA", externalId: "az-1", title: "Gone", status: "DISMISSED", dedupeKey: "key-2" } });
     const file = await asFile();
@@ -180,11 +180,26 @@ describe("importExport (E10-6)", () => {
     expect(JSON.stringify(file)).not.toContain("scoredWith");
     await importExport(prisma(), file);
     expect(await prisma().postingScore.count()).toBe(0);
-    expect(await prisma().agentCandidate.findMany({ orderBy: { externalId: "asc" }, select: { externalId: true, status: true, applicationId: true, reasons: true } })).toEqual([
-      { externalId: "az-1", status: "DISMISSED", applicationId: null, reasons: null },
-      { externalId: "job-1", status: "DRAFTED", applicationId: draft.id, reasons: ["Python"] },
+    expect(await prisma().agentCandidate.findMany({ orderBy: { externalId: "asc" }, select: { externalId: true, status: true, applicationId: true, reasons: true, searchId: true, searchName: true } })).toEqual([
+      { externalId: "az-1", status: "DISMISSED", applicationId: null, reasons: null, searchId: null, searchName: "" },
+      { externalId: "job-1", status: "DRAFTED", applicationId: draft.id, reasons: ["Python"], searchId: "s1", searchName: "Database Admin" },
     ]);
     expect(await prisma().application.findUniqueOrThrow({ where: { id: draft.id } })).toMatchObject({ origin: "AGENT", awaitingReview: true });
+
+    // Files from before saved searches lack the tag; those candidates come back untagged.
+    const untagged = JSON.parse(JSON.stringify(file));
+    for (const candidate of untagged.agentCandidates) {
+      delete candidate.searchId;
+      delete candidate.searchName;
+    }
+    const reparsed = parseExport(JSON.stringify(untagged));
+    expect(reparsed).toMatchObject({ ok: true, data: { agentCandidates: [{ searchId: null, searchName: "" }, { searchId: null, searchName: "" }] } });
+    if (!reparsed.ok) return;
+    await importExport(prisma(), reparsed.data);
+    expect(await prisma().agentCandidate.findMany({ select: { searchId: true, searchName: true } })).toEqual([
+      { searchId: null, searchName: "" },
+      { searchId: null, searchName: "" },
+    ]);
 
     // Files from before the agent have none, and their applications are the user's own.
     const older = JSON.parse(JSON.stringify(file));

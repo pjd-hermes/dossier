@@ -68,3 +68,7 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `src/lib/agent/run.db.test.ts` | `AgentRun` fixtures gain `requests: []` | Saved searches, task 6 |
 | `src/lib/agent/schedule.db.test.ts` | `AgentRun` fixtures gain `requests: []` | Saved searches, task 6 |
 | `src/lib/agent/view.db.test.ts` | `AgentRun` fixtures gain `requests: []` | Saved searches, task 6 |
+| `prisma/schema.prisma` | `AgentCandidate` gains `searchId`, `searchName` and an index on `searchId` | Saved searches, task 7 |
+| `src/lib/data-export.ts` | The `agentCandidate` export schema gains `searchId` and `searchName`, with defaults for older files | Saved searches, task 7 |
+| `src/lib/data-import.db.test.ts` | The candidate round trip covers the search tag and files without it | Saved searches, task 7 |
+| `src/app/(app)/settings/delete-everything.db.test.ts` | The candidate it deletes carries a search tag | Saved searches, task 7 |
