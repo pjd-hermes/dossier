@@ -150,6 +150,8 @@ export const settingsSchema = z.object({
   jobSource: z.enum([...JOB_SOURCES, "OFF"]).nullable().catch(null),
   /** The providers searched together (the agent, saved searches); null means just the one `jobSource` names. */
   jobSourcesOn: json(z.array(z.enum(JOB_SOURCES))).nullable().catch(null),
+  /** Requests Dossier sent to each provider per day (UTC), kept 31 days. They belong to the install: exports leave them out (INSTALL_SETTINGS). */
+  jobSourceUsage: json(z.partialRecord(z.enum(JOB_SOURCES), z.record(z.string(), z.number().int().min(0)))).catch({}),
   jsearchKeyEnc: z.string().nullable().catch(null),
   /** Where the JSearch key is from: OpenWeb Ninja, or the RapidAPI marketplace. */
   jsearchHost: z.enum(JSEARCH_HOSTS).catch("openwebninja"),

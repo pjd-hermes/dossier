@@ -29,10 +29,14 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `src/lib/ai/providers.live.test.ts` | A live check for OpenCode Go beside upstream's Anthropic one | 1.10.0 merge (70b25f1) |
 | `DEVELOPMENT.md` | The OpenCode Go live check, beside the Anthropic one | 1.10.0 merge (70b25f1) |
 | `package.json`, `yarn.lock` | The step 1 dependency patch; upstream's versions taken in the merge | 1.10.0 merge (70b25f1) |
-| `src/lib/settings.ts` | The `jobSourcesOn` setting: several job providers on at once | Saved searches, task 1 |
-| `src/lib/settings.test.ts` | Tests for `jobSourcesOn` | Saved searches, task 1 |
+| `src/lib/settings.ts` | The `jobSourcesOn` setting (several job providers on at once) and `jobSourceUsage` (requests counted per provider) | Saved searches, task 1 |
+| `src/lib/settings.test.ts` | Tests for `jobSourcesOn`; `jobSourceUsage` in the defaults | Saved searches, task 1 |
 | `src/lib/job-search/config.ts` | `sourcesOn` in the job search config and its view; `source` now means Find jobs' provider | Saved searches, task 1 |
 | `src/lib/job-search/config.test.ts` | Tests for `sourcesOn` | Saved searches, task 1 |
 | `src/lib/job-search/sources.ts` | `sourcesOn` in `JobSearchSettingsView` | Saved searches, task 1 |
 | `src/app/(app)/settings/job-search-section.test.tsx` | The view fixture gains `sourcesOn` | Saved searches, task 1 |
 | `src/app/(app)/settings/actions.db.test.ts` | The view it expects after saving a source gains `sourcesOn` | Saved searches, task 1 |
+| `src/lib/data-export.ts` | `jobSourceUsage` joins `INSTALL_SETTINGS`: request counts stay out of exports | Saved searches, task 2 |
+| `src/lib/data-export.db.test.ts` | The install-settings case covers `jobSourceUsage` | Saved searches, task 2 |
+| `src/lib/job-search/index.ts` | A `countRequest` call before each request sent to a provider | Saved searches, task 2 |
+| `src/lib/job-search/index.test.ts` | Tests for the request counting | Saved searches, task 2 |
