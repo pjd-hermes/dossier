@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { demoProfile } from "@/lib/demo-profile";
 import { jobSearchError } from "@/lib/job-search/errors";
-import type { FoundPosting, JobSource, SearchQuery } from "@/lib/job-search/search";
+import { searchQuerySchema, type FoundPosting, type JobSource, type SearchQuery } from "@/lib/job-search/search";
 import type { JobContext } from "@/lib/jobs/runner";
 import { sweepFinishedJobs } from "@/lib/jobs/retention";
 import { saveSettings, loadSettings } from "@/lib/settings-data";
@@ -357,6 +357,17 @@ describe("runAgentScan with several saved searches and providers", () => {
     expect((await runAgentScan({ manual: true }, context(), later)).message).toBe("JSearch's limit of 2 a day is used up until later. Nothing to search until then.");
     expect(fake.requests).toEqual([]);
     expect((await runs())[0]).toMatchObject({ at: later.toISOString(), requests: [], message: "JSearch's limit of 2 a day is used up until later. Nothing to search until then." });
+  });
+
+  it("sends a provider the search's query only, as Find jobs does, so the cache can answer", async () => {
+    const { searchPostings } = await import("@/lib/job-search");
+    vi.mocked(searchPostings).mockClear();
+    await runAgentScan({ manual: false }, context(), now);
+    const sent = vi.mocked(searchPostings).mock.calls.map(([, , sentQuery]) => sentQuery);
+    expect(sent).toHaveLength(8);
+    expect(sent[0]).toStrictEqual(query);
+    // In the schema's order too: the cache key is the query as JSON.
+    for (const sentQuery of sent) expect(Object.keys(sentQuery)).toEqual(Object.keys(searchQuerySchema.shape));
   });
 
   it("says so when no provider that's on can run the searches", async () => {

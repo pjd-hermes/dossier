@@ -13,7 +13,7 @@ import { searchPostings } from "@/lib/job-search";
 import { credentialsFor, loadJobSearchConfig, requestContext, type JobSearchConfig } from "@/lib/job-search/config";
 import { JobSearchError } from "@/lib/job-search/errors";
 import { agentSources, sourceProblem } from "@/lib/job-search/providers-on";
-import { postingKey, postingText, type FoundPosting, type JobSource } from "@/lib/job-search/search";
+import { postingKey, postingText, searchQuerySchema, type FoundPosting, type JobSource } from "@/lib/job-search/search";
 import { startJob, type JobContext } from "@/lib/jobs/runner";
 import { logServerError } from "@/lib/log";
 import { saveScore } from "@/lib/posting-scores";
@@ -101,6 +101,8 @@ export async function runAgentScan({ manual }: { manual: boolean }, context: Job
 
   const searches = runnableSearches(searchesOf(settings));
   const searchById = new Map(searches.map((search) => [search.id, search]));
+  // The query alone, as Find jobs sends it, so a search made there an hour ago answers from the cache.
+  const queryById = new Map(searches.map((search) => [search.id, searchQuerySchema.parse(search)]));
   const problems: string[] = [];
   const sources = agentSources(config).filter((source) => {
     const problem = sourceProblem(config, source);
@@ -129,7 +131,7 @@ export async function runAgentScan({ manual }: { manual: boolean }, context: Job
     if (failed.has(source)) continue;
     try {
       // The first page only: the agent never asks for a second.
-      const { postings } = await searchPostings(source, credentialsFor(config, source), searchById.get(searchId)!, null, requestContext(source));
+      const { postings } = await searchPostings(source, credentialsFor(config, source), queryById.get(searchId)!, null, requestContext(source));
       answered.set(source, (answered.get(source) ?? 0) + 1);
       found.push(...postings.map((posting) => ({ searchId, posting })));
     } catch (error) {
