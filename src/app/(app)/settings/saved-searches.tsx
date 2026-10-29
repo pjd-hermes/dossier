@@ -1,7 +1,7 @@
 "use client";
 
 import { Switch } from "radix-ui";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import { useTrackSave } from "@/components/save-tracker";
 import { toastResult } from "@/components/toast";
@@ -58,19 +58,24 @@ export function SavedSearches({
 }) {
   const track = useTrackSave();
   const [searches, setSearches] = useState(initial);
+  // The newest list, which an update after an await builds on.
+  const latest = useRef(initial);
   const [openId, setOpenId] = useState<string | null>(null);
   const [removing, setRemoving] = useState<AgentSearch | null>(null);
 
-  const update = (next: AgentSearch[]) => {
+  // Functional updates, so a change made while a save is in flight isn't lost.
+  const update = (change: (current: AgentSearch[]) => AgentSearch[]) => {
+    const next = change(latest.current);
+    latest.current = next;
     setSearches(next);
     onChange?.(next);
   };
-  const patch = (id: string, changes: Partial<AgentSearch>) => update(searches.map((search) => (search.id === id ? { ...search, ...changes } : search)));
+  const patch = (id: string, changes: Partial<AgentSearch>) => update((current) => current.map((search) => (search.id === id ? { ...search, ...changes } : search)));
 
   const add = async () => {
     const result = toastResult(await track(addAgentSearch({})));
     if (!result.ok) return;
-    update([...searches, result.data]);
+    update((current) => [...current, result.data]);
     setOpenId(result.data.id);
   };
 
@@ -83,8 +88,8 @@ export function SavedSearches({
   const remove = async (search: AgentSearch) => {
     const result = toastResult(await track(removeAgentSearch({ id: search.id })));
     if (!result.ok) return;
-    update(searches.filter((other) => other.id !== search.id));
-    if (openId === search.id) setOpenId(null);
+    update((current) => current.filter((other) => other.id !== search.id));
+    setOpenId((current) => (current === search.id ? null : current));
   };
 
   const providers = sources.length > 0 ? joinWithAnd(sources.map((source) => SOURCE_INFO[source].name)) : "the providers you turn on";

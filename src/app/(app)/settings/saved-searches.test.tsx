@@ -127,6 +127,21 @@ describe("Saved searches", () => {
     expect(screen.getByText("1 of 5")).toBeInTheDocument();
   });
 
+  it("keeps a change made while another search's save is still under way", async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    let finish: (value: Awaited<ReturnType<typeof updateAgentSearch>>) => void = () => {};
+    vi.mocked(updateAgentSearch).mockImplementationOnce(() => new Promise((resolve) => (finish = resolve)));
+    open([search("a", "Product designer"), search("b", "Data analyst")], onChange);
+    await user.click(screen.getByRole("switch", { name: "Run Product designer" }));
+    await user.click(screen.getByRole("switch", { name: "Run Data analyst" }));
+    // Product designer's save fails and switches it back; Data analyst's pause stays.
+    finish({ ok: false, error: "No." });
+    await waitFor(() => expect(screen.getByRole("switch", { name: "Run Product designer" })).toHaveAttribute("aria-checked", "true"));
+    expect(screen.getByRole("switch", { name: "Run Data analyst" })).toHaveAttribute("aria-checked", "false");
+    expect(onChange).toHaveBeenLastCalledWith([expect.objectContaining({ id: "a", enabled: true }), expect.objectContaining({ id: "b", enabled: false })]);
+  });
+
   it("stops adding at 5", () => {
     open(Array.from({ length: 5 }, (_, index) => search(String(index), `Search ${index}`)));
     expect(screen.getByText("5 of 5")).toBeInTheDocument();
