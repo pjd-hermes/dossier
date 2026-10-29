@@ -2,9 +2,10 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 
 import { isAiConfigured, loadAiConfig, loadAiSettingsView } from "@/lib/ai/config";
+import { searchesOf } from "@/lib/agent/searches";
 import { jobSearchView, loadJobSearchConfig } from "@/lib/job-search/config";
 import { COUNTRIES } from "@/lib/job-search/countries";
-import { loadSearch } from "@/lib/posting-searches";
+import { agentSources } from "@/lib/job-search/providers-on";
 import { providerOption } from "@/lib/ai/provider-options";
 import { lastNightlyBackup } from "@/lib/backup-schedule";
 import { backupsDir } from "@/lib/backups";
@@ -56,15 +57,16 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         <AgentSection
           initial={{
             enabled: settings.agentEnabled,
-            // With no search of its own yet, it starts from the last one in Find jobs.
-            query: settings.agentQuery.keywords.trim() ? settings.agentQuery : ((await loadSearch())?.query ?? settings.agentQuery),
+            searches: searchesOf(settings),
+            caps: settings.agentSourceCaps,
             hour: settings.agentHour,
             minScore: settings.agentMinScore,
             maxScores: settings.agentMaxScores,
             maxDrafts: settings.agentMaxDrafts,
             autoDraft: settings.agentAutoDraft,
           }}
-          source={(await loadJobSearchConfig()).source}
+          sources={agentSources(await loadJobSearchConfig())}
+          runs={settings.agentRuns}
           aiReady={await isAiConfigured()}
           countries={COUNTRIES}
           timeZone={await lastKnownTimeZone()}

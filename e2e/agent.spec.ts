@@ -16,8 +16,17 @@ const card = (page: import("@playwright/test").Page, title: string) => page.getB
 
 test("finds, scores, drafts and dismisses, and never brings a posting back", async ({ page }) => {
   await page.goto("/settings?section=agent");
+  // A saved search first: the agent needs one that is on.
+  await page.getByRole("button", { name: "Add a search" }).click();
+  await page.getByLabel("Name").fill("Product designer");
   await page.getByLabel("What").fill("Product designer");
   await page.getByLabel("Country").selectOption("nl");
+  // Saved once typing pauses; the search can only be turned on after that.
+  await expect
+    .poll(async () => (await sql<{ value: string }>(`SELECT value FROM "Setting" WHERE key = 'agentSearches'`))[0]?.value ?? "")
+    .toMatch(/"keywords":\s*"Product designer".*"country":\s*"nl"|"country":\s*"nl".*"keywords":\s*"Product designer"/);
+  await page.getByRole("switch", { name: "Run Product designer" }).click();
+  await expect(page.getByRole("switch", { name: "Run Product designer" })).toHaveAttribute("aria-checked", "true");
   await page.getByRole("switch", { name: "Run the job agent" }).click();
   await expect(page.getByRole("switch", { name: "Run the job agent" })).toHaveAttribute("aria-checked", "true");
   await expect(page.getByText("All changes saved")).toBeVisible();

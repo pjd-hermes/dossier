@@ -125,11 +125,11 @@ describe("the drafts' actions (E16-5)", () => {
 });
 
 describe("saving the agent's settings (E16-7)", () => {
-  it("saves each change, and turns on only with keywords and a country", async () => {
+  it("saves each change, and turns on only with a search that is ready and on", async () => {
     await saveSettings({ agentEnabled: false, agentQuery: { ...query, keywords: "" } });
-    expect(await saveAgentSettings({ enabled: true })).toEqual({ ok: false, error: "Type what the agent should look for before turning it on." });
-    expect(await saveAgentSettings({ enabled: true, query: { ...query, country: "" } })).toEqual({ ok: false, error: "Choose a country for the search before turning the agent on." });
-    expect(await saveAgentSettings({ enabled: true, query })).toEqual({ ok: true, data: null });
+    expect(await saveAgentSettings({ enabled: true })).toEqual({ ok: false, error: "Add a saved search and turn it on before turning the agent on." });
+    await saveSettings({ agentQuery: query });
+    expect(await saveAgentSettings({ enabled: true })).toEqual({ ok: true, data: null });
     expect(await saveAgentSettings({ hour: 9, minScore: 80, autoDraft: true, maxDrafts: 5 })).toEqual({ ok: true, data: null });
     expect(await loadSettings()).toMatchObject({ agentEnabled: true, agentQuery: query, agentHour: 9, agentMinScore: 80, agentAutoDraft: true, agentMaxDrafts: 5, agentMaxScores: 15 });
     expect(await saveAgentSettings({ maxScores: 31 })).toMatchObject({ ok: false });

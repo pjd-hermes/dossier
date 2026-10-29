@@ -81,3 +81,9 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `src/lib/agent/draft.db.test.ts` | `candidateData` with a search | Saved searches, task 8 |
 | `src/lib/agent/view.db.test.ts` | Config fake gains `sourcesOn`; the new setup message | Saved searches, task 8 |
 | `src/app/(app)/agent/actions.db.test.ts` | Config fake gains `sourcesOn`; the new setup messages and order | Saved searches, task 8 |
+| `src/app/(app)/agent/actions.ts` | `saveAgentSettings` drops `query`; turning the agent on needs a runnable saved search | Saved searches, task 9 |
+| `src/app/(app)/agent/actions.db.test.ts` | The turn-on test follows the new rule | Saved searches, task 9 |
+| `src/app/(app)/settings/agent-section.tsx` | "What it looks for" card becomes Saved searches and Searches per provider; intro, footer and warning copy | Saved searches, task 9 |
+| `src/app/(app)/settings/agent-section.test.tsx` | Tests follow the saved searches, the new copy and the turn-on refusal | Saved searches, task 9 |
+| `src/app/(app)/settings/page.tsx` | Passes the saved searches, caps, agent providers and runs to the Job agent section | Saved searches, task 9 |
+| `e2e/agent.spec.ts` | Adds a saved search through the new UI before turning the agent on | Saved searches, task 9 |

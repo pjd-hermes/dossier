@@ -8,10 +8,10 @@ import { agentDraftJob, approveCandidate, dismissCandidate, draftJobKey, restore
 import { AGENT_JOB_KEY, agentScanJob } from "@/lib/agent/jobs";
 import { agentSetupProblem } from "@/lib/agent/run";
 import { runLimitProblem } from "@/lib/agent/runs";
-import { searchReady } from "@/lib/agent/searches";
+import { runnableSearches, searchesOf } from "@/lib/agent/searches";
 import { action, ActionError } from "@/lib/action";
 import { loadJobSearchConfig } from "@/lib/job-search/config";
-import { safeLink, searchQuerySchema } from "@/lib/job-search/search";
+import { safeLink } from "@/lib/job-search/search";
 import { findUnfinishedJobs, startJob } from "@/lib/jobs/runner";
 import { prisma } from "@/lib/prisma";
 import { loadSettings, saveSettings } from "@/lib/settings-data";
@@ -21,12 +21,11 @@ import { loadSettings, saveSettings } from "@/lib/settings-data";
 
 /**
  * Settings → Job agent (E16-7): each change saves at once. Turning the agent
- * on needs a search with keywords and a country.
+ * on needs a saved search that is ready and on.
  */
 export const saveAgentSettings = action(
   z.object({
     enabled: z.boolean().optional(),
-    query: searchQuerySchema.optional(),
     hour: z.number().int().min(0).max(23).optional(),
     minScore: z.number().int().min(0).max(100).optional(),
     maxScores: z.number().int().min(1).max(30).optional(),
@@ -35,13 +34,11 @@ export const saveAgentSettings = action(
   }),
   async (changes) => {
     const settings = await loadSettings();
-    const query = changes.query ?? settings.agentQuery;
-    if (changes.enabled && !searchReady(query)) {
-      throw new ActionError(query.keywords.trim() ? "Choose a country for the search before turning the agent on." : "Type what the agent should look for before turning it on.");
+    if (changes.enabled && runnableSearches(searchesOf(settings)).length === 0) {
+      throw new ActionError("Add a saved search and turn it on before turning the agent on.");
     }
     await saveSettings({
       agentEnabled: changes.enabled,
-      agentQuery: changes.query,
       agentHour: changes.hour,
       agentMinScore: changes.minScore,
       agentMaxScores: changes.maxScores,
