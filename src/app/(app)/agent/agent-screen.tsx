@@ -86,7 +86,9 @@ export function AgentScreen({ view }: { view: AgentView }) {
     });
 
   const drafts = view.drafts.filter((candidate) => !hidden.has(candidate.id));
-  const shown = (candidate: AgentCandidateView) => !hidden.has(candidate.id) && (!searchId || candidate.search?.id === searchId);
+  // A search that no longer has a button (its postings are gone) stops filtering.
+  const active = view.filters.some((filter) => filter.id === searchId) ? searchId : null;
+  const shown = (candidate: AgentCandidateView) => !hidden.has(candidate.id) && (!active || candidate.search?.id === active);
   const scored = view.scored.filter(shown);
   const below = view.belowMinimum.filter(shown);
   const empty = drafts.length === 0 && scored.length === 0;
@@ -171,7 +173,7 @@ export function AgentScreen({ view }: { view: AgentView }) {
                 <button
                   key={filter.id ?? "all"}
                   type="button"
-                  aria-pressed={searchId === filter.id}
+                  aria-pressed={active === filter.id}
                   onClick={() => setSearchId(filter.id)}
                   className="rounded-full border border-line px-3.5 py-1.5 text-meta text-ink aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-on-primary"
                 >

@@ -210,4 +210,30 @@ describe("AgentScreen (E16-6)", () => {
     open();
     expect(screen.queryByRole("group", { name: "Show postings from" })).not.toBeInTheDocument();
   });
+
+  it("filters the below-minimum list too, and stops filtering once the search has no button", async () => {
+    const user = userEvent.setup();
+    const writer = { id: "b", name: "Writer" };
+    const changes = {
+      scored: [card("s1", 84, { search: { id: "a", name: "Designer" } }), card("s2", 72, { search: writer })],
+      belowMinimum: [card("b1", 40, { search: { id: "a", name: "Designer" } })],
+      filters: [
+        { id: "a", name: "Designer", count: 2 },
+        { id: "b", name: "Writer", count: 1 },
+      ],
+    };
+    const { rerender } = open(changes);
+    await user.click(screen.getByRole("button", { name: "Designer · 2" }));
+    await user.click(screen.getByRole("button", { name: /1 below your minimum score/ }));
+    expect(screen.getByText("Posting b1")).toBeInTheDocument();
+    expect(screen.queryByText("Posting s2")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Writer · 1" }));
+    expect(screen.queryByRole("button", { name: /below your minimum score/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("Posting s1")).not.toBeInTheDocument();
+
+    rerender(<AgentScreen view={{ ...view, ...changes, filters: [] }} />);
+    expect(screen.getByText("Posting s1")).toBeInTheDocument();
+    expect(screen.getByText("Posting s2")).toBeInTheDocument();
+    expect(screen.getByText("Posting b1")).toBeInTheDocument();
+  });
 });
