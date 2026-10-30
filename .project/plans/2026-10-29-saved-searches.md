@@ -18,6 +18,10 @@ Playwright, Yarn 4.
 **Spec:** [2026-10-29-saved-searches-design.md](2026-10-29-saved-searches-design.md). Mockups:
 https://claude.ai/artifact/E8uhVJUJiWec5gxv1cx838. Read both before starting a task.
 
+> **Superseded in part (final review):** provider caps count per calendar day in the user's time zone, not a
+> rolling 24 hours, and the messages say "used up for today" / "Nothing to search until tomorrow."
+> The design spec has the current wording; this plan is kept as the record of how the work was built.
+
 ## Global Constraints
 
 - Feature branch `claude/project-thread-ug5ge7` only. Commit and push after each task. **Never open a pull
