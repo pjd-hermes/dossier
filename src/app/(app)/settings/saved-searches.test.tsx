@@ -69,6 +69,16 @@ describe("Saved searches", () => {
     expect(screen.queryByText(/has no distance filter/)).not.toBeInTheDocument();
   });
 
+  it("says an enabled search needs keywords and a country, until it has them", async () => {
+    const user = userEvent.setup();
+    open([search("a", "Product designer"), search("b", "Data analyst", { keywords: "" })]);
+    await user.click(screen.getByRole("button", { name: "Edit Data analyst" }));
+    expect(screen.getByText("Needs keywords and a country")).toBeInTheDocument();
+    expect(screen.queryByText("Runs every day")).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("What"), "Data analyst");
+    expect(screen.getByText("Runs every day")).toBeInTheDocument();
+  });
+
   it("saves a rename once typing pauses, and shows it in the list", async () => {
     const user = userEvent.setup();
     open([search("a", "Product designer"), search("b", "Data analyst")]);

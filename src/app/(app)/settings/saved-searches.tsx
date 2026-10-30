@@ -10,6 +10,7 @@ import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { MAX_AGENT_SEARCHES, type AgentSearch } from "@/lib/agent/search-schema";
+import { searchReady } from "@/lib/agent/searches";
 import { useAutosave } from "@/hooks/use-autosave";
 import type { Country } from "@/lib/job-search/countries";
 import type { JobSource } from "@/lib/job-search/search";
@@ -192,7 +193,7 @@ function SearchEditor({
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <RunSwitch search={search} onChange={onRun} />
-          <span className="text-meta text-muted">{search.enabled ? "Runs every day" : "Paused"}</span>
+          <span className="text-meta text-muted">{!search.enabled ? "Paused" : searchReady(search) ? "Runs every day" : "Needs keywords and a country"}</span>
         </div>
         <div className="flex items-center gap-4">
           <Button variant="danger-text" size="sm" onClick={onRemove}>
