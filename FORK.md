@@ -103,3 +103,9 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 | `src/lib/agent/run.db.test.ts` | Tests for the cap per calendar day, and the new "used up for today" message | Saved searches, final fixes |
 | `src/app/(app)/settings/agent-section.tsx` | Passes the time zone to the next-run preview | Saved searches, final fixes |
 | `DEVELOPMENT.md` | Caps per provider count per calendar day in the user's time zone | Saved searches, final fixes |
+
+## Kept on purpose
+
+- `saveJobSource` and `testJobSource` in `src/app/(app)/settings/actions.ts` are no longer used by any
+  screen (only their tests call them): the Job search section now turns providers on and off one by one.
+  They stay so the file stays close to upstream. Don't remove or rework them in an upstream sync.
