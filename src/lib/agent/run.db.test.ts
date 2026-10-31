@@ -164,7 +164,7 @@ describe("runAgentScan (E16-3)", () => {
     const result = await runAgentScan({ manual: false }, context(), now);
     vi.unstubAllGlobals();
 
-    expect(result).toMatchObject({ found: 3, scored: 3, message: "2 new postings are waiting for a look." });
+    expect(result).toMatchObject({ found: 3, scored: 3, message: "Searched 1 job type on JSearch. 2 new postings are waiting for a look." });
     expect(requests.map((request) => request.headers.get("authorization"))).toEqual(["Bearer ts_secret", "Bearer ts_secret", "Bearer ts_secret"]);
     const candidates = await prisma().agentCandidate.findMany({ orderBy: { externalId: "asc" } });
     expect(candidates.map((candidate) => [candidate.externalId, candidate.score])).toEqual([["a", 100], ["b", 100], ["c", 0]]);
