@@ -25,6 +25,8 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 
 | File | Why | Since |
 |---|---|---|
+| `src/lib/ai/providers/openai-compatible.ts` | `OPENCODE_GO` kind, `defaultHeaders` and `defaultJsonMode()` beside upstream's servers.ts; OpenCode Go keeps its own address | 1.11.0 merge |
+| `src/lib/agent/run.ts`, `src/lib/settings.ts`, `src/app/(app)/settings/agent-section.tsx`, `agent-section.test.tsx`, `page.tsx` | Saved searches kept alongside upstream's scorer (`loadPostingScorer`, `scoringProblem`, `scoring` prop) | 1.11.0 merge |
 | `src/lib/env.ts` | The OpenCode Go AI provider in `AI_PROVIDERS` | 1.10.0 merge (70b25f1) |
 | `src/lib/ai/providers.live.test.ts` | A live check for OpenCode Go beside upstream's Anthropic one | 1.10.0 merge (70b25f1) |
 | `DEVELOPMENT.md` | The OpenCode Go live check, beside the Anthropic one | 1.10.0 merge (70b25f1) |

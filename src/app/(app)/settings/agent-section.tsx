@@ -11,10 +11,12 @@ import { Toggle } from "@/components/ui/toggle";
 import type { AgentSearch, SourceCaps as Caps } from "@/lib/agent/search-schema";
 import type { Country } from "@/lib/job-search/countries";
 import type { JobSource } from "@/lib/job-search/search";
+import type { Scorer } from "@/lib/scoring/scorers";
 import type { AgentRun } from "@/lib/settings";
 
 import { saveAgentSettings } from "../agent/actions";
 import { SavedSearches } from "./saved-searches";
+import { SETTINGS_SECTIONS, settingsSectionHref, type SettingsSectionId } from "./sections";
 import { SettingsSectionIntro } from "./settings-screen";
 import { SourceCaps } from "./source-caps";
 
@@ -45,7 +47,7 @@ export function AgentSection({
   initial,
   sources,
   runs,
-  aiReady,
+  scoring,
   countries,
   timeZone,
 }: {
@@ -54,7 +56,8 @@ export function AgentSection({
   sources: readonly JobSource[];
   /** Newest first, for the preview of the next run. */
   runs: readonly AgentRun[];
-  aiReady: boolean;
+  /** What scores the postings (Settings → Scoring), and whether it's set up. */
+  scoring: { scorer: Scorer; ready: boolean };
   countries: readonly Country[];
   /** The user's time zone, which the hour is in. */
   timeZone: string;
@@ -79,14 +82,12 @@ export function AgentSection({
         Once a day it runs each of your saved searches on every provider that&apos;s on, scores the new postings against your profile, and keeps the best on the Agent screen. It never sends or applies.
       </SettingsSectionIntro>
 
-      {(sources.length === 0 || !aiReady) && (
-        <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
-          {sources.length === 0 ? "The agent searches the providers you turn on in " : "The agent scores postings with the AI provider in "}
-          <Link href={sources.length === 0 ? "/settings?section=jobs" : "/settings?section=ai"} className="font-medium text-warning underline underline-offset-2">
-            {sources.length === 0 ? "Settings → Job search" : "Settings → AI provider"}
-          </Link>
-          {sources.length === 0 ? ", and none is on yet." : ", which isn't set up yet. Choose one first."}
-        </p>
+      {sources.length === 0 ? (
+        <SetupNote before="The agent searches the providers you turn on in " section="jobs" after=", and none is on yet." />
+      ) : scoring.ready ? null : scoring.scorer === "JEV" ? (
+        <SetupNote before="The agent scores postings with Jev, which needs your TypeSafe key in " section="scoring" after="." />
+      ) : (
+        <SetupNote before="The agent scores postings with the AI provider in " section="ai" after=", which isn't set up yet. Choose one first." />
       )}
 
       <Card padding="none" className="px-7 py-4">
@@ -164,5 +165,18 @@ export function AgentSection({
         {settings.autoDraft ? ` and prepares up to ${plural(settings.maxDrafts, "draft", "drafts")}` : ""}. Scoring and drafts go to your AI provider with your profile, as a new application does; job providers only get the searches.
       </p>
     </>
+  );
+}
+
+/** What the agent still needs, with a link to the section that sets it up. */
+function SetupNote({ before, section, after }: { before: string; section: SettingsSectionId; after: string }) {
+  return (
+    <p role="note" className="rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
+      {before}
+      <Link href={settingsSectionHref(section)} className="font-medium text-warning underline underline-offset-2">
+        Settings → {SETTINGS_SECTIONS.find((entry) => entry.id === section)?.label}
+      </Link>
+      {after}
+    </p>
   );
 }
