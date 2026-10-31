@@ -13,8 +13,8 @@ JSearch did not find the government postings in PJ's own testing.
 | 3 | `import_posting` MCP tool | Shared entry point for postings that come from outside the search adapters | to write |
 | 4 | Email-alert ingestion (NEOGOV Job Interest Cards first) | Covers the government postings JSearch misses; needs step 3 and the emails collected since step 1 | to write |
 | 5 | Upstream sync script and `-pjd` release workflow | Makes each upstream release (now 1.11.0) a repeatable merge, with release notes that name the upstream release. The tag format and release workflow come from PR #4 | [2026-10-31-sync-and-release.md](2026-10-31-sync-and-release.md) |
-| 6 | Follow-up reminders and stale-application nudges | Dashboard card for applications with no reply after N days, with an AI-drafted follow-up built on the inbox and Gmail code. Built together with step 7 | to write |
-| 7 | Duplicate and ghost-job detection | Several providers on at once means the same posting repeats: merge by company and title, flag long-reposted postings | to write |
+| 6 | Follow-up reminders and stale-application nudges | Upstream's Worth a look already nudges quiet applications; this adds mail-aware silence, an AI-drafted follow-up in the Gmail thread, snooze, a cadence and a close-out. Built together with step 7 | [2026-11-01-follow-ups.md](2026-11-01-follow-ups.md) |
+| 7 | Duplicate and ghost-job detection | The agent's key matches by link, so the same job on two providers slips through: one definition of "same job" across providers, marks that follow a job between providers, and age and repost hints | [2026-11-01-duplicate-and-ghost-jobs.md](2026-11-01-duplicate-and-ghost-jobs.md) |
 
 ## Ideas, TBD
 
