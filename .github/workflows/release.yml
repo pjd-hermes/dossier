@@ -19,8 +19,8 @@ concurrency:
 jobs:
   release:
     name: Release
-    # Upstream only: this fork doesn't publish the website or cut releases.
-    if: github.repository == 'AienTech/dossier'
+    # Upstream, and PJ's fork (see FORK.md). The website stays upstream only.
+    if: contains(fromJSON('["AienTech/dossier", "pjd-hermes/dossier"]'), github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:

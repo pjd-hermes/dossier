@@ -14,6 +14,20 @@ changes that are not meant for upstream and are not offered back.
 
 Never rebase: the fork's history stays as it is, and each upstream release arrives as one merge.
 
+## Releases
+
+Fork releases are tagged `v<upstream version>-pjd.<fork version>`, for example `v1.10.0-pjd.0.1.0`: the upstream
+release the fork is merged up to, then the fork's own semver. A `-` is used because Docker tags can't hold `+`.
+`package.json` stays at the upstream version so syncs don't conflict; the fork version lives only in the tag.
+
+1. Merge to `main` and wait for CI to build the image for that commit.
+2. Push an annotated tag: `git tag -a v1.10.0-pjd.0.1.0 -m "<notes>"` then `git push origin v1.10.0-pjd.0.1.0`.
+3. `.github/workflows/release.yml` tags the image on GHCR (`ghcr.io/pjd-hermes/dossier:<tag>` and `latest`) and
+   creates the GitHub release with the tag message as notes. It runs on upstream and this fork only; the
+   website workflow (`pages.yml`) stays upstream only.
+
+Fork versions: `0.1.0` is the first release (1.10.0 merge plus saved searches and multi-provider job search).
+
 ## Rules
 
 1. New logic goes in new files. Upstream files get thin calls into them; no renames, no reformatting.
@@ -25,6 +39,7 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 
 | File | Why | Since |
 |---|---|---|
+| `.github/workflows/release.yml` | The release job also runs on this fork | First fork release |
 | `src/lib/env.ts` | The OpenCode Go AI provider in `AI_PROVIDERS` | 1.10.0 merge (70b25f1) |
 | `src/lib/ai/providers.live.test.ts` | A live check for OpenCode Go beside upstream's Anthropic one | 1.10.0 merge (70b25f1) |
 | `DEVELOPMENT.md` | The OpenCode Go live check, beside the Anthropic one | 1.10.0 merge (70b25f1) |
