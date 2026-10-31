@@ -4,22 +4,19 @@ import { z } from "zod";
 
 import { Prisma } from "@/generated/prisma/client";
 import { AgentCandidateStatus } from "@/generated/prisma/enums";
-import { getAiProvider } from "@/lib/ai";
-import { isAiConfigured } from "@/lib/ai/config";
 import { AiError } from "@/lib/ai/errors";
-import { loadTaskOptions } from "@/lib/ai/task-options";
-import { scorePosting } from "@/lib/ai/tasks";
 import { searchPostings } from "@/lib/job-search";
 import { credentialsFor, loadJobSearchConfig, requestContext, type JobSearchConfig } from "@/lib/job-search/config";
 import { JobSearchError } from "@/lib/job-search/errors";
 import { agentSources, sourceProblem } from "@/lib/job-search/providers-on";
-import { postingKey, postingText, searchQuerySchema, type FoundPosting, type JobSource } from "@/lib/job-search/search";
+import { postingKey, searchQuerySchema, type FoundPosting, type JobSource } from "@/lib/job-search/search";
 import { JOB_MESSAGES, startJob, type JobContext } from "@/lib/jobs/runner";
 import { logServerError } from "@/lib/log";
 import { saveScore } from "@/lib/posting-scores";
 import { postingStates } from "@/lib/postings";
 import { prisma } from "@/lib/prisma";
 import { loadProfile } from "@/lib/profile-data";
+import { loadPostingScorer, scoringProblem } from "@/lib/scoring";
 import type { SettingsData } from "@/lib/settings";
 import { loadSettings } from "@/lib/settings-data";
 import { lastKnownTimeZone } from "@/lib/time-zone";
@@ -57,7 +54,9 @@ export async function agentSetupProblem(settings: SettingsData, config: JobSearc
   if (runnableSearches(searchesOf(settings)).length === 0) return "Add a saved search in Settings → Job agent first.";
   // It never searches the Bundesagentur für Arbeit on its own, which the BA's terms forbid most clearly (#223).
   if (agentSources(config).length === 0) return "Turn on JSearch, Adzuna or FreeHire in Settings → Job search first.";
-  if (!(await isAiConfigured())) return "Choose an AI provider in Settings → AI provider first.";
+  // Scoring is what a run does; drafts ask the AI provider when there are any.
+  const scoring = await scoringProblem();
+  if (scoring) return scoring;
   return null;
 }
 
@@ -166,7 +165,7 @@ export async function runAgentScan({ manual }: { manual: boolean }, context: Job
   }
   const toScore = pickToScore(bySearch, searches.map((search) => search.id), settings.agentMaxScores);
   await context.step(`Scoring ${toScore.length} ${toScore.length === 1 ? "posting" : "postings"}`);
-  const [provider, options, profile] = await Promise.all([getAiProvider(), loadTaskOptions(), loadProfile()]);
+  const [score, profile] = await Promise.all([loadPostingScorer(), loadProfile()]);
   let scored = 0;
   let queued = 0;
   const kept: string[] = [];
@@ -174,14 +173,10 @@ export async function runAgentScan({ manual }: { manual: boolean }, context: Job
   for (const { searchId, posting } of toScore) {
     if (context.signal.aborted) break;
     try {
-      const { data, promptVersion } = await scorePosting(
-        provider,
-        { posting: postingText(posting), title: posting.title, company: posting.company, place: posting.place, remote: posting.remote, salary: posting.salary, profile },
-        { ...options, signal: context.signal },
-      );
+      const { data, scoredWith } = await score(posting, profile, context.signal);
       const candidate = await prisma.agentCandidate.create({ data: candidateData(posting, data, { id: searchId, name: searchById.get(searchId)!.name }), select: { id: true } });
       // Find jobs shows it too (#208).
-      await saveScore(posting, data, promptVersion);
+      await saveScore(posting, data, scoredWith);
       kept.push(candidate.id);
       scored += 1;
       if (data.score >= settings.agentMinScore) queued += 1;

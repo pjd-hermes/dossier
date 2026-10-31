@@ -26,7 +26,7 @@ const countries = [
   { code: "nl", name: "Netherlands" },
 ];
 const open = (props: Partial<Parameters<typeof AgentSection>[0]> = {}) =>
-  render(<AgentSection initial={initial} sources={["JSEARCH"]} runs={[]} aiReady countries={countries} timeZone="Europe/Berlin" {...props} />);
+  render(<AgentSection initial={initial} sources={["JSEARCH"]} runs={[]} scoring={{ scorer: "AI", ready: true }} countries={countries} timeZone="Europe/Berlin" {...props} />);
 
 beforeEach(() => vi.clearAllMocks());
 
@@ -98,9 +98,15 @@ describe("Settings → Job agent (E16-7)", () => {
   });
 
   it("points to the AI provider while it isn't set up", () => {
-    open({ aiReady: false });
+    open({ scoring: { scorer: "AI", ready: false } });
     expect(screen.getByRole("note")).toHaveTextContent("The agent scores postings with the AI provider in Settings → AI provider, which isn't set up yet. Choose one first.");
     expect(screen.getByRole("link", { name: "Settings → AI provider" })).toHaveAttribute("href", "/settings?section=ai");
+  });
+
+  it("asks for the TypeSafe key when Jev scores without one (#274)", () => {
+    open({ scoring: { scorer: "JEV", ready: false } });
+    expect(screen.getByRole("note")).toHaveTextContent("The agent scores postings with Jev, which needs your TypeSafe key in Settings → Scoring.");
+    expect(screen.getByRole("link", { name: "Settings → Scoring" })).toHaveAttribute("href", "/settings?section=scoring");
   });
 
   it("switches back and says why when a change isn't saved", async () => {

@@ -16,17 +16,17 @@ Never rebase: the fork's history stays as it is, and each upstream release arriv
 
 ## Releases
 
-Fork releases are tagged `v<upstream version>-pjd.<fork version>`, for example `v1.10.0-pjd.0.1.0`: the upstream
+Fork releases are tagged `v<upstream version>-pjd.<fork version>`, for example `v1.11.0-pjd.0.1.0`: the upstream
 release the fork is merged up to, then the fork's own semver. A `-` is used because Docker tags can't hold `+`.
 `package.json` stays at the upstream version so syncs don't conflict; the fork version lives only in the tag.
 
 1. Merge to `main` and wait for CI to build the image for that commit.
-2. Push an annotated tag: `git tag -a v1.10.0-pjd.0.1.0 -m "<notes>"` then `git push origin v1.10.0-pjd.0.1.0`.
+2. Push an annotated tag: `git tag -a v1.11.0-pjd.0.1.0 -m "<notes>"` then `git push origin v1.11.0-pjd.0.1.0`.
 3. `.github/workflows/release.yml` tags the image on GHCR (`ghcr.io/pjd-hermes/dossier:<tag>` and `latest`) and
    creates the GitHub release with the tag message as notes. It runs on upstream and this fork only; the
    website workflow (`pages.yml`) stays upstream only.
 
-Fork versions: `0.1.0` is the first release (1.10.0 merge plus saved searches and multi-provider job search).
+Fork versions: `0.1.0` is the first release (upstream 1.11.0 merged, plus saved searches and multi-provider job search).
 
 ## Rules
 
@@ -39,6 +39,8 @@ Fork versions: `0.1.0` is the first release (1.10.0 merge plus saved searches an
 
 | File | Why | Since |
 |---|---|---|
+| `src/lib/ai/providers/openai-compatible.ts` | `OPENCODE_GO` kind, `defaultHeaders` and `defaultJsonMode()` beside upstream's servers.ts; OpenCode Go keeps its own address | 1.11.0 merge |
+| `src/lib/agent/run.ts`, `src/lib/settings.ts`, `src/app/(app)/settings/agent-section.tsx`, `agent-section.test.tsx`, `page.tsx` | Saved searches kept alongside upstream's scorer (`loadPostingScorer`, `scoringProblem`, `scoring` prop) | 1.11.0 merge |
 | `.github/workflows/release.yml` | The release job also runs on this fork | First fork release |
 | `src/lib/env.ts` | The OpenCode Go AI provider in `AI_PROVIDERS` | 1.10.0 merge (70b25f1) |
 | `src/lib/ai/providers.live.test.ts` | A live check for OpenCode Go beside upstream's Anthropic one | 1.10.0 merge (70b25f1) |
