@@ -7,15 +7,18 @@ import { loadSettings } from "@/lib/settings-data";
 
 import type { RequestContext, SourceCredentials } from "./adapter";
 import { JobSearchError, jobSearchError } from "./errors";
-import type { JobSource, JSearchHost } from "./search";
-import { ARBEITSAGENTUR_NOTE, SOURCE_INFO, type JobKeyState, type JobSearchSettingsView } from "./sources";
+import { JOB_SOURCES, type JobSource, type JSearchHost } from "./search";
+import { requestsInPastDays, SHOWN_DAYS, type JobSourceUsage } from "./usage";
+import { ARBEITSAGENTUR_NOTE, FREEHIRE_URL, SOURCE_INFO, type JobKeyState, type JobSearchSettingsView } from "./sources";
 
 // Which job source to search, and with which key (E14-4): what's saved in
 // Settings, or else the DOSSIER_JOBS_* variables. Each source keeps its own
 // key, so a key only ever goes to the source it's for.
 
 export type JobSearchConfig = {
-  /** The source in effect; null while job search is off. */
+  /** The providers that are on, in provider order; empty while job search is off. */
+  sourcesOn: JobSource[];
+  /** Find jobs' provider: the saved or environment choice when it's on, else the first one on; null while none is. */
   source: JobSource | null;
   /** Whether the choice is saved in Settings, rather than coming from DOSSIER_JOBS_SOURCE. */
   saved: boolean;
@@ -26,18 +29,27 @@ export type JobSearchConfig = {
    * when its note was accepted. Its searches wait until then.
    */
   arbeitsagentur: { offered: boolean; acceptedAt: string | null };
+  /** The FreeHire to search: freehire.me, or a self-hosted one (DOSSIER_FREEHIRE_URL). */
+  freehire: { url: string };
 };
 
-type SavedJobSettings = Pick<SettingsData, "jobSource" | "jsearchKeyEnc" | "jsearchHost" | "adzunaAppId" | "adzunaKeyEnc" | "arbeitsagenturAcceptedAt">;
+type SavedJobSettings = Pick<SettingsData, "jobSource" | "jobSourcesOn" | "jsearchKeyEnc" | "jsearchHost" | "adzunaAppId" | "adzunaKeyEnc" | "arbeitsagenturAcceptedAt">;
 type JobEnv = Pick<
   Env,
-  "DOSSIER_JOBS_SOURCE" | "DOSSIER_JSEARCH_KEY" | "DOSSIER_JSEARCH_HOST" | "DOSSIER_ADZUNA_APP_ID" | "DOSSIER_ADZUNA_KEY" | "DOSSIER_JOBS_ARBEITSAGENTUR"
+  | "DOSSIER_JOBS_SOURCE"
+  | "DOSSIER_JSEARCH_KEY"
+  | "DOSSIER_JSEARCH_HOST"
+  | "DOSSIER_ADZUNA_APP_ID"
+  | "DOSSIER_ADZUNA_KEY"
+  | "DOSSIER_FREEHIRE_URL"
+  | "DOSSIER_JOBS_ARBEITSAGENTUR"
 >;
 
 const FROM_ENV: Record<NonNullable<Env["DOSSIER_JOBS_SOURCE"]>, JobSource | null> = {
   jsearch: "JSEARCH",
   adzuna: "ADZUNA",
   arbeitsagentur: "ARBEITSAGENTUR",
+  freehire: "FREEHIRE",
   off: null,
 };
 
@@ -58,9 +70,12 @@ export function resolveJobSearchConfig(saved: SavedJobSettings, source: JobEnv, 
   const jsearchKey = keyOf(saved.jsearchKeyEnc, source.DOSSIER_JSEARCH_KEY, secret);
   const offered = source.DOSSIER_JOBS_ARBEITSAGENTUR !== "off";
   const chosen = saved.jobSource ? (saved.jobSource === "OFF" ? null : saved.jobSource) : source.DOSSIER_JOBS_SOURCE ? FROM_ENV[source.DOSSIER_JOBS_SOURCE] : null;
+  // Without a saved list, the one chosen provider is the only one on. A BA choice saved before the server turned it off counts as Off.
+  const wanted = saved.jobSourcesOn ?? (chosen ? [chosen] : []);
+  const sourcesOn = JOB_SOURCES.filter((name) => wanted.includes(name) && (name !== "ARBEITSAGENTUR" || offered));
   return {
-    // A BA choice saved before the server turned it off counts as Off.
-    source: chosen === "ARBEITSAGENTUR" && !offered ? null : chosen,
+    sourcesOn,
+    source: chosen && sourcesOn.includes(chosen) ? chosen : (sourcesOn[0] ?? null),
     saved: saved.jobSource !== null,
     jsearch: {
       ...jsearchKey,
@@ -72,6 +87,7 @@ export function resolveJobSearchConfig(saved: SavedJobSettings, source: JobEnv, 
       ...keyOf(saved.adzunaKeyEnc, source.DOSSIER_ADZUNA_KEY, secret),
     },
     arbeitsagentur: { offered, acceptedAt: saved.arbeitsagenturAcceptedAt },
+    freehire: { url: source.DOSSIER_FREEHIRE_URL ?? FREEHIRE_URL },
   };
 }
 
@@ -90,22 +106,33 @@ export function arbeitsagenturStartupNotice(config: JobSearchConfig): string | n
   return `Job search: DOSSIER_JOBS_SOURCE chooses the Bundesagentur für Arbeit. ${ARBEITSAGENTUR_NOTE}${waiting}`;
 }
 
-/** What Settings → Job search shows: the source and the keys' states, never the keys. */
-export function jobSearchView(config: JobSearchConfig): JobSearchSettingsView {
+/** What Settings → Job search shows: the source and the keys' states, never the keys, and the requests sent in the past 30 days. */
+export function jobSearchView(config: JobSearchConfig, usage: JobSourceUsage = {}, now = new Date()): JobSearchSettingsView {
+  const used = JOB_SOURCES.map((name) => [name, requestsInPastDays(usage, name, SHOWN_DAYS, now)] as const).filter(([, count]) => count > 0);
   return {
     source: config.source ?? "OFF",
+    sourcesOn: config.sourcesOn,
     jsearch: { host: config.jsearch.host, keyState: config.jsearch.keyState },
     adzuna: { appId: config.adzuna.appId, keyState: config.adzuna.keyState },
     arbeitsagentur: config.arbeitsagentur,
+    freehire: { host: new URL(config.freehire.url).host },
+    usage: Object.fromEntries(used),
   };
 }
 
 /**
  * Where a source's requests go: its own address, unless the end-to-end
- * tests point every source at their fake one (DOSSIER_JOBS_TEST_BASE_URL).
+ * tests point every source at their fake one (DOSSIER_JOBS_TEST_BASE_URL),
+ * or FreeHire is pointed at a self-hosted origin (DOSSIER_FREEHIRE_URL).
  */
-export function requestContext(source: JobSource, base = env.DOSSIER_JOBS_TEST_BASE_URL): RequestContext {
-  return base ? { baseUrl: `${base.replace(/\/+$/, "")}/${source.toLowerCase()}` } : {};
+export function requestContext(
+  source: JobSource,
+  base = env.DOSSIER_JOBS_TEST_BASE_URL,
+  freehireUrl = env.DOSSIER_FREEHIRE_URL,
+): RequestContext {
+  if (base) return { baseUrl: `${base.replace(/\/+$/, "")}/${source.toLowerCase()}` };
+  if (source === "FREEHIRE" && freehireUrl) return { baseUrl: freehireUrl };
+  return {};
 }
 
 /**
@@ -134,5 +161,7 @@ export function credentialsFor<S extends JobSource>(config: JobSearchConfig, sou
       if (!config.arbeitsagentur.acceptedAt) throw jobSearchError("not-accepted", source);
       return {} as SourceCredentials[S];
     }
+    case "FREEHIRE":
+      return {} as SourceCredentials[S];
   }
 }

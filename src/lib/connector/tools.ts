@@ -12,7 +12,7 @@ import { unitsSchema } from "@/lib/application-data";
 import { fitBand } from "@/lib/fit";
 import { countryCodeFor, countryName } from "@/lib/job-search/countries";
 import { fullText } from "@/lib/job-search/find";
-import { DEFAULT_RADIUS_KM, foundPostingSchema, POSTED_WITHIN, postingText, RADII_KM, type FoundPosting, type PostedWithin, type SearchQuery, type ShownPosting } from "@/lib/job-search/search";
+import { DEFAULT_RADIUS_KM, foundPostingSchema, POSTED_WITHIN, postingText, RADII_KM, type FoundPosting, type JobSource, type PostedWithin, type SearchQuery, type ShownPosting } from "@/lib/job-search/search";
 import { getJob, startJob } from "@/lib/jobs/runner";
 import { withoutPrivateParts } from "@/lib/letter-frame";
 import { fetchPosting } from "@/lib/posting-fetch";
@@ -156,7 +156,7 @@ export function createDossierServer(origin: string): McpServer {
     {
       title: "Search for jobs",
       description:
-        "Searches the job source set up in Dossier's settings and keeps the search in Find jobs → Past searches. Each search uses one search from the user's plan with that source. " +
+        "Searches a job provider that's on in Dossier's settings (source picks one) and keeps the search in Find jobs → Past searches. Each search uses one search from the user's plan with that source. " +
         "Returns a search_id and numbered postings; pass both to get_posting, save_job_scores or save_application, or the search_id to more_jobs.",
       inputSchema: z.object({
         keywords: z.string().trim().min(1).max(200).describe("Job title, skill or company, e.g. 'product designer'"),
@@ -165,6 +165,10 @@ export function createDossierServer(origin: string): McpServer {
         remote_only: z.boolean().optional().describe("Only remote postings."),
         radius_km: z.literal(RADII_KM).optional(),
         posted_within: z.enum(POSTED).optional().describe("any, day, 3days, week or month. Defaults to month."),
+        source: z
+          .enum(["jsearch", "adzuna", "freehire", "arbeitsagentur"])
+          .optional()
+          .describe("Which provider to search; one that's on in Settings → Job search. Defaults to the one Find jobs uses."),
       }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
@@ -181,7 +185,7 @@ export function createDossierServer(origin: string): McpServer {
         remoteOnly,
         postedWithin: input.posted_within ?? "month",
       };
-      const ran = await runSearch(query);
+      const ran = await runSearch(query, input.source?.toUpperCase() as JobSource | undefined);
       if (!ran.ok) return failure(ran.message);
       const search = await loadSearch(ran.id);
       if (!search) return failure("The search ran, but couldn't be read back. Try again.");

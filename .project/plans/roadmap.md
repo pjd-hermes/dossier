@@ -9,7 +9,7 @@ JSearch did not find the government postings in PJ's own testing.
 | # | Step | Why this order | Plan |
 |---|---|---|---|
 | 1 | Patch, bring in upstream PR #19 (OpenCode Go), deploy, and sign up for alerts | Closes the live Next.js advisories before anything is exposed; alert emails start collecting for step 4 | [2026-10-28-patch-next-sharp.md](2026-10-28-patch-next-sharp.md) |
-| 2 | Saved searches, one per job type (upstream issue #11, maintainer-approved scope) | Main discovery tool for everything JSearch/Adzuna can see | to write |
+| 2 | Several providers at once, and saved searches by job type (upstream issue #11, widened for the fork) | Main discovery tool for everything JSearch, Adzuna and FreeHire can see | Design: [2026-10-29-saved-searches-design.md](2026-10-29-saved-searches-design.md); plan: [2026-10-29-saved-searches.md](2026-10-29-saved-searches.md) |
 | 3 | `import_posting` MCP tool | Shared entry point for postings that come from outside the search adapters | to write |
 | 4 | Email-alert ingestion (NEOGOV Job Interest Cards first) | Covers the government postings JSearch misses; needs step 3 and the emails collected since step 1 | to write |
 

@@ -8,6 +8,7 @@ vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "a".repeat(32) } }));
 
 const nothingSaved = {
   jobSource: null,
+  jobSourcesOn: null,
   jsearchKeyEnc: null,
   jsearchHost: "openwebninja" as const,
   adzunaAppId: null,
@@ -23,9 +24,12 @@ describe("resolveJobSearchConfig", () => {
     expect(config).toMatchObject({ source: null, saved: false, jsearch: { key: null, keyState: "none" }, adzuna: { appId: "", key: null } });
     expect(jobSearchView(config)).toEqual({
       source: "OFF",
+      sourcesOn: [],
       jsearch: { host: "openwebninja", keyState: "none" },
       adzuna: { appId: "", keyState: "none" },
       arbeitsagentur: { offered: true, acceptedAt: null },
+      freehire: { host: "freehire.me" },
+      usage: {},
     });
   });
 
@@ -49,6 +53,7 @@ describe("resolveJobSearchConfig", () => {
   it("prefers what's saved, Off included, and decrypts saved keys", () => {
     const saved = {
       jobSource: "ADZUNA" as const,
+      jobSourcesOn: null,
       jsearchKeyEnc: encryptSecret(JOB_SOURCE_KEY, "ak_saved"),
       jsearchHost: "openwebninja" as const,
       adzunaAppId: "app-saved",
@@ -84,6 +89,7 @@ describe("credentialsFor", () => {
   it("gives each source its own key", () => {
     expect(credentialsFor(config, "JSEARCH")).toEqual({ key: "ak_saved", host: "rapidapi" });
     expect(credentialsFor({ ...config, arbeitsagentur: { offered: true, acceptedAt: ACCEPTED } }, "ARBEITSAGENTUR")).toEqual({});
+    expect(credentialsFor(config, "FREEHIRE")).toEqual({});
   });
 
   it("says what's missing", () => {
@@ -134,5 +140,66 @@ describe("requestContext", () => {
   it("leaves sources at their own address, unless the end-to-end tests point them at a fake", () => {
     expect(requestContext("JSEARCH", undefined)).toEqual({});
     expect(requestContext("ADZUNA", "http://127.0.0.1:3998/")).toEqual({ baseUrl: "http://127.0.0.1:3998/adzuna" });
+    expect(requestContext("FREEHIRE", undefined, "https://jobs.example")).toEqual({ baseUrl: "https://jobs.example" });
+    expect(requestContext("FREEHIRE", "http://127.0.0.1:3998/", "https://jobs.example")).toEqual({
+      baseUrl: "http://127.0.0.1:3998/freehire",
+    });
+  });
+});
+
+describe("FreeHire from the environment", () => {
+  it("chooses FreeHire when DOSSIER_JOBS_SOURCE says so", () => {
+    expect(resolveJobSearchConfig(nothingSaved, { DOSSIER_JOBS_SOURCE: "freehire" }).source).toBe("FREEHIRE");
+  });
+
+  it("searches freehire.me, or the self-hosted FreeHire DOSSIER_FREEHIRE_URL names", () => {
+    expect(resolveJobSearchConfig(nothingSaved, noEnv).freehire).toEqual({ url: "https://freehire.me" });
+    const own = resolveJobSearchConfig(nothingSaved, { DOSSIER_FREEHIRE_URL: "https://jobs.example:8443" });
+    expect(own.freehire).toEqual({ url: "https://jobs.example:8443" });
+    expect(jobSearchView(own).freehire).toEqual({ host: "jobs.example:8443" });
+  });
+});
+
+describe("sourcesOn", () => {
+  it("is the one chosen source while nothing else is saved", () => {
+    expect(resolveJobSearchConfig({ ...nothingSaved, jobSource: "JSEARCH" }, noEnv)).toMatchObject({ sourcesOn: ["JSEARCH"], source: "JSEARCH" });
+  });
+
+  it("follows DOSSIER_JOBS_SOURCE when nothing is saved", () => {
+    expect(resolveJobSearchConfig(nothingSaved, { DOSSIER_JOBS_SOURCE: "adzuna" }).sourcesOn).toEqual(["ADZUNA"]);
+  });
+
+  it("is empty while job search is off", () => {
+    expect(resolveJobSearchConfig({ ...nothingSaved, jobSource: "OFF" }, noEnv)).toMatchObject({ sourcesOn: [], source: null });
+  });
+
+  it("keeps the saved list in provider order, without duplicates, and falls back from a provider that is off", () => {
+    const config = resolveJobSearchConfig({ ...nothingSaved, jobSource: "ADZUNA", jobSourcesOn: ["FREEHIRE", "JSEARCH", "JSEARCH"] }, noEnv);
+    expect(config).toMatchObject({ sourcesOn: ["JSEARCH", "FREEHIRE"], source: "JSEARCH" });
+  });
+
+  it("keeps Find jobs' provider when it is on", () => {
+    expect(resolveJobSearchConfig({ ...nothingSaved, jobSource: "FREEHIRE", jobSourcesOn: ["JSEARCH", "FREEHIRE"] }, noEnv).source).toBe("FREEHIRE");
+  });
+
+  it("leaves out the Bundesagentur when the server doesn't offer it", () => {
+    const saved = { ...nothingSaved, jobSourcesOn: ["ARBEITSAGENTUR" as const, "FREEHIRE" as const] };
+    expect(resolveJobSearchConfig(saved, { DOSSIER_JOBS_ARBEITSAGENTUR: "off" }).sourcesOn).toEqual(["FREEHIRE"]);
+  });
+
+  it("lets a saved list win over a saved Off", () => {
+    const config = resolveJobSearchConfig({ ...nothingSaved, jobSource: "OFF", jobSourcesOn: ["FREEHIRE"] }, noEnv);
+    expect(config).toMatchObject({ sourcesOn: ["FREEHIRE"], source: "FREEHIRE" });
+  });
+
+  it("reaches the settings view, with the past 30 days of requests", () => {
+    const now = new Date("2026-10-29T12:00:00Z");
+    const usage = { JSEARCH: { "2026-10-29": 3, "2026-10-01": 2, "2026-09-29": 40 }, ADZUNA: { "2026-09-01": 5 } };
+    expect(jobSearchView(resolveJobSearchConfig(nothingSaved, noEnv), usage, now).usage).toEqual({ JSEARCH: 5 });
+  });
+
+  it("reaches the settings view", () => {
+    const config = resolveJobSearchConfig({ ...nothingSaved, jobSourcesOn: ["ADZUNA", "FREEHIRE"] }, noEnv);
+    expect(jobSearchView(config).sourcesOn).toEqual(config.sourcesOn);
   });
 });

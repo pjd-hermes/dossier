@@ -110,7 +110,7 @@ export const testAiConnection = action(z.object({}), async () => {
 // Settings → Job search (E14-4). Every field saves on its own; each returns
 // what the section shows, never a key.
 
-const loadView = async () => jobSearchView(await loadJobSearchConfig());
+const loadView = async () => jobSearchView(await loadJobSearchConfig(), (await loadSettings()).jobSourceUsage);
 
 /**
  * Picks the source to search, or Off. The Bundesagentur für Arbeit only with

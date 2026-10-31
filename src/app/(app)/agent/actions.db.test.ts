@@ -24,7 +24,7 @@ vi.mock("@/lib/jobs/runner", async (importOriginal) => ({
 const setup = vi.hoisted(() => ({ ai: true, source: "JSEARCH" as "JSEARCH" | null }));
 vi.mock("@/lib/ai/config", () => ({ isAiConfigured: async () => setup.ai }));
 vi.mock("@/lib/job-search/config", () => ({
-  loadJobSearchConfig: async () => ({ source: setup.source, saved: true, jsearch: { key: "k", host: "openwebninja", keyState: "set" }, adzuna: { appId: "", key: null, keyState: "none" } }),
+  loadJobSearchConfig: async () => ({ sourcesOn: setup.source ? [setup.source] : [], source: setup.source, saved: true, jsearch: { key: "k", host: "openwebninja", keyState: "set" }, adzuna: { appId: "", key: null, keyState: "none" } }),
   credentialsFor: () => ({ key: "k", host: "openwebninja" }),
   requestContext: () => ({}),
 }));
@@ -59,20 +59,20 @@ describe("Run now (E16-4)", () => {
     await saveSettings({ agentEnabled: false });
     expect(await runAgentNow({})).toEqual({ ok: false, error: "Turn the job agent on in Settings → Job agent first." });
     await saveSettings({ agentEnabled: true, agentQuery: { ...query, keywords: "" } });
-    expect(await runAgentNow({})).toMatchObject({ ok: false, error: "Add what to look for in Settings → Job agent first." });
+    expect(await runAgentNow({})).toMatchObject({ ok: false, error: "Add a saved search in Settings → Job agent first." });
     await saveSettings({ agentQuery: query });
+    setup.source = null;
+    expect(await runAgentNow({})).toMatchObject({ ok: false, error: "Turn on JSearch, Adzuna or FreeHire in Settings → Job search first." });
+    setup.source = "JSEARCH";
     setup.ai = false;
     expect(await runAgentNow({})).toMatchObject({ ok: false, error: "Choose an AI provider in Settings → AI provider first." });
-    setup.ai = true;
-    setup.source = null;
-    expect(await runAgentNow({})).toMatchObject({ ok: false, error: "Choose a job source in Settings → Job search first." });
   });
 
   it("waits an hour after the previous run, and keeps to 3 a day", async () => {
     const at = (minutesAgo: number) => new Date(Date.now() - minutesAgo * 60_000).toISOString();
-    await saveSettings({ agentRuns: [{ at: at(20), manual: false, message: null }] });
+    await saveSettings({ agentRuns: [{ at: at(20), manual: false, message: null, requests: [] }] });
     expect(await runAgentNow({})).toEqual({ ok: false, error: "The agent ran less than an hour ago. Try again in 40 minutes." });
-    await saveSettings({ agentRuns: [at(70), at(200), at(400)].map((time) => ({ at: time, manual: true, message: null })) });
+    await saveSettings({ agentRuns: [at(70), at(200), at(400)].map((time) => ({ at: time, manual: true, message: null, requests: [] })) });
     expect(await runAgentNow({})).toMatchObject({ ok: false, error: expect.stringMatching(/^The agent has run 3 times in the past 24 hours/) });
   });
 });
@@ -125,11 +125,11 @@ describe("the drafts' actions (E16-5)", () => {
 });
 
 describe("saving the agent's settings (E16-7)", () => {
-  it("saves each change, and turns on only with keywords and a country", async () => {
+  it("saves each change, and turns on only with a search that is ready and on", async () => {
     await saveSettings({ agentEnabled: false, agentQuery: { ...query, keywords: "" } });
-    expect(await saveAgentSettings({ enabled: true })).toEqual({ ok: false, error: "Type what the agent should look for before turning it on." });
-    expect(await saveAgentSettings({ enabled: true, query: { ...query, country: "" } })).toEqual({ ok: false, error: "Choose a country for the search before turning the agent on." });
-    expect(await saveAgentSettings({ enabled: true, query })).toEqual({ ok: true, data: null });
+    expect(await saveAgentSettings({ enabled: true })).toEqual({ ok: false, error: "Add a saved search and turn it on before turning the agent on." });
+    await saveSettings({ agentQuery: query });
+    expect(await saveAgentSettings({ enabled: true })).toEqual({ ok: true, data: null });
     expect(await saveAgentSettings({ hour: 9, minScore: 80, autoDraft: true, maxDrafts: 5 })).toEqual({ ok: true, data: null });
     expect(await loadSettings()).toMatchObject({ agentEnabled: true, agentQuery: query, agentHour: 9, agentMinScore: 80, agentAutoDraft: true, agentMaxDrafts: 5, agentMaxScores: 15 });
     expect(await saveAgentSettings({ maxScores: 31 })).toMatchObject({ ok: false });

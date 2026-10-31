@@ -57,6 +57,8 @@ describe("stored settings", () => {
       educationOrder: "date",
       backupProblem: null,
       jobSource: null,
+      jobSourcesOn: null,
+      jobSourceUsage: {},
       jsearchKeyEnc: null,
       jsearchHost: "openwebninja",
       adzunaAppId: null,
@@ -64,6 +66,8 @@ describe("stored settings", () => {
       arbeitsagenturAcceptedAt: null,
       agentEnabled: false,
       agentQuery: { keywords: "", place: "", country: "", radiusKm: 25, remoteOnly: false, postedWithin: "any" },
+      agentSearches: null,
+      agentSourceCaps: { JSEARCH: 2 },
       agentHour: 7,
       agentMinScore: 70,
       agentMaxScores: 15,
@@ -147,7 +151,7 @@ describe("stored settings", () => {
 describe("the job agent's settings (E16)", () => {
   it("reads its search and runs as JSON, and values out of range as the defaults", () => {
     const query = { keywords: "Data scientist", place: "Berlin", country: "de", radiusKm: 50, remoteOnly: true, postedWithin: "week" } as const;
-    const runs = [{ at: "2026-10-20T07:00:00.000Z", manual: false, message: "2 new postings scored." }];
+    const runs = [{ at: "2026-10-20T07:00:00.000Z", manual: false, message: "2 new postings scored.", requests: [] }];
     const rows = Object.entries({ agentQuery: query, agentRuns: runs, agentEnabled: true, agentHour: 9 }).map(([key, value]) => ({ key, value: settingValue(value)! }));
     expect(rows).toContainEqual({ key: "agentQuery", value: JSON.stringify(query) });
     expect(settingsFromRows(rows)).toMatchObject({ agentQuery: query, agentRuns: runs, agentEnabled: true, agentHour: 9 });
@@ -162,11 +166,50 @@ describe("the job agent's settings (E16)", () => {
     ]);
     expect(odd).toMatchObject({ agentQuery: { keywords: "", country: "" }, agentRuns: [], agentHour: 7, agentMinScore: 70, agentMaxScores: 15, agentMaxDrafts: 3 });
   });
+
+  it("reads a run saved before requests were recorded as one that made none", () => {
+    const old = [{ at: "2026-10-20T07:00:00.000Z", manual: false, message: null }];
+    expect(settingsFromRows([{ key: "agentRuns", value: JSON.stringify(old) }]).agentRuns).toEqual([{ ...old[0], requests: [] }]);
+  });
 });
 
 describe("page limits (SET-9)", () => {
   it("counts the pages a resume may have", () => {
     expect([maxPages("1"), maxPages("2"), maxPages("none")]).toEqual([1, 2, null]);
     expect([pagesInWords(1), pagesInWords(2)]).toEqual(["one page", "two pages"]);
+  });
+});
+
+describe("the job providers that are on", () => {
+  const read = (value: string) => settingsFromRows([{ key: "jobSourcesOn", value }]).jobSourcesOn;
+
+  it("reads a list of providers", () => {
+    expect(read('["JSEARCH"]')).toEqual(["JSEARCH"]);
+  });
+
+  it("falls back to null for nonsense or an unknown provider", () => {
+    expect(read("nonsense")).toBeNull();
+    expect(read('["NOPE"]')).toBeNull();
+  });
+});
+
+describe("saved searches and caps", () => {
+  const search = { id: "a1", name: "Designers", keywords: "designer", place: "", country: "nl", radiusKm: 25, remoteOnly: false, postedWithin: "any", enabled: true };
+  const read = (key: string, value: string) => settingsFromRows([{ key, value }]);
+
+  it("reads a saved list and up to five searches", () => {
+    expect(read("agentSearches", JSON.stringify([search])).agentSearches).toEqual([search]);
+    expect(read("agentSearches", "[]").agentSearches).toEqual([]);
+  });
+
+  it("falls back to null for six searches or nonsense", () => {
+    expect(read("agentSearches", JSON.stringify(Array.from({ length: 6 }, () => search))).agentSearches).toBeNull();
+    expect(read("agentSearches", "nonsense").agentSearches).toBeNull();
+  });
+
+  it("reads caps, and falls back to the default for one out of range", () => {
+    expect(read("agentSourceCaps", '{"JSEARCH":5,"ADZUNA":"all"}').agentSourceCaps).toEqual({ JSEARCH: 5, ADZUNA: "all" });
+    expect(read("agentSourceCaps", '{"JSEARCH":9}').agentSourceCaps).toEqual({ JSEARCH: 2 });
+    expect(read("agentSourceCaps", "nonsense").agentSourceCaps).toEqual({ JSEARCH: 2 });
   });
 });

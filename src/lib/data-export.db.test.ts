@@ -71,12 +71,14 @@ describe("buildExport (E10-4)", () => {
         { key: "usagePingChoice", value: "on" },
         { key: "usagePingChoiceAt", value: "2026-10-20T08:00:00.000Z" },
         { key: "usagePingChoiceText", value: "1" },
+        { key: "jobSourceUsage", value: '{"JSEARCH":{"2026-09-28":4}}' },
       ],
     });
     const data = await buildExport(prisma(), { now, includeApiKey: true });
     expect(data.settings.map((setting) => setting.key)).not.toContain("usagePingId");
     expect(JSON.stringify(data)).not.toContain("6f1c0e5a");
     expect(JSON.stringify(data)).not.toContain("usagePing");
+    expect(data.settings.map((setting) => setting.key)).not.toContain("jobSourceUsage");
   });
 
   it("treats the job sources' keys like the API key, and has the postings (E14-9)", async () => {

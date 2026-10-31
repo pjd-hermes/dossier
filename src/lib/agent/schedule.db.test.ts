@@ -21,7 +21,7 @@ vi.mock("@/lib/jobs/runner", async (importOriginal) => ({
 }));
 
 const prisma = () => db.client!;
-const run = (at: string, manual = false): AgentRun => ({ at, manual, message: null });
+const run = (at: string, manual = false): AgentRun => ({ at, manual, message: null, requests: [] });
 
 beforeEach(async () => {
   zone.value = "Europe/Berlin";

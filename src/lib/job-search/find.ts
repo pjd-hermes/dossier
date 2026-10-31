@@ -10,8 +10,8 @@ import type { FoundPosting, JobSource, SearchPage, SearchProblem, SearchQuery } 
 // src/lib/posting-searches.ts.
 
 /**
- * One page for `query` from `source`, the one chosen in Settings unless
- * given (a kept search goes on with the source it ran on).
+ * One page for `query` from `source`, Find jobs' provider (`config.source`)
+ * unless given (a kept search goes on with the source it ran on).
  */
 export async function askSource(
   query: SearchQuery,

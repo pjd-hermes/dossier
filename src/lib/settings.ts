@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { AiProvider, Creativity, DateFormat, PaperSize, Tone } from "@/generated/prisma/enums";
 import { EMPTY_QUERY, JOB_SOURCES, JSEARCH_HOSTS, searchQuerySchema } from "@/lib/job-search/search";
+import { agentSearchSchema, DEFAULT_SOURCE_CAPS, MAX_AGENT_SEARCHES, sourceCapsSchema } from "@/lib/agent/search-schema";
 import { startupsRefreshSchema } from "@/lib/startups/types";
 
 /** Date styles for documents (SET-6), labelled with an example as in the prototype. */
@@ -94,10 +95,12 @@ export const agentRunSchema = z.object({
   manual: z.boolean(),
   /** What the run ended with, for the Agent screen; null while it runs. */
   message: z.string().nullable(),
+  /** The provider requests the run planned, before any was sent: they count against each provider's daily cap. */
+  requests: z.array(z.object({ source: z.enum(JOB_SOURCES), searchId: z.string() })).default([]),
 });
 export type AgentRun = z.infer<typeof agentRunSchema>;
 /** How many runs are kept: more than a day's worth, for the limit and the screen. */
-export const AGENT_RUNS_KEPT = 10;
+export const AGENT_RUNS_KEPT = 30;
 
 export const settingsSchema = z.object({
   // AI provider (SET-1). Null means "not set in the app": fall back to the
@@ -148,6 +151,10 @@ export const settingsSchema = z.object({
   // decides. "OFF" is a choice. Each source keeps its own key, encrypted
   // like the AI key, so switching back and forth loses nothing.
   jobSource: z.enum([...JOB_SOURCES, "OFF"]).nullable().catch(null),
+  /** The providers searched together (the agent, saved searches); null means just the one `jobSource` names. */
+  jobSourcesOn: json(z.array(z.enum(JOB_SOURCES))).nullable().catch(null),
+  /** Requests Dossier sent to each provider per day (UTC), kept 31 days. They belong to the install: exports leave them out (INSTALL_SETTINGS). */
+  jobSourceUsage: json(z.partialRecord(z.enum(JOB_SOURCES), z.record(z.string(), z.number().int().min(0)))).catch({}),
   jsearchKeyEnc: z.string().nullable().catch(null),
   /** Where the JSearch key is from: OpenWeb Ninja, or the RapidAPI marketplace. */
   jsearchHost: z.enum(JSEARCH_HOSTS).catch("openwebninja"),
@@ -155,11 +162,15 @@ export const settingsSchema = z.object({
   adzunaKeyEnc: z.string().nullable().catch(null),
   /** When "I understand" was ticked under the Bundesagentur für Arbeit's note (#223); its searches wait for it. */
   arbeitsagenturAcceptedAt: z.iso.datetime().nullable().catch(null),
-  // Job agent (E16): one search, run once a day. Off until it's turned on.
-  // It asks the source in Settings → Job search, with its key.
+  // Job agent (E16): the saved searches, run once a day. Off until it's turned on.
+  // It asks the providers that are on in Settings → Job search, with their keys.
   agentEnabled: flag(false),
   /** The search it runs, as Find jobs asks it; it needs keywords and a country to run. */
   agentQuery: json(searchQuerySchema).catch(EMPTY_QUERY),
+  /** The saved searches, up to five; null until saved once, when `agentQuery` stands in (searchesOf). */
+  agentSearches: json(z.array(agentSearchSchema).max(MAX_AGENT_SEARCHES)).nullable().catch(null),
+  /** The most searches a day each provider is sent; one not listed has no cap. */
+  agentSourceCaps: json(sourceCapsSchema).catch(DEFAULT_SOURCE_CAPS),
   /** The hour of the day it runs, in the user's time zone. */
   agentHour: z.coerce.number().int().min(0).max(23).catch(7),
   /** Postings scored below this stay out of the queue. */

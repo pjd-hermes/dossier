@@ -4,15 +4,19 @@ import { json, stubFetch } from "@/lib/ai/test-http";
 import { jsearchV2LastPage, jsearchV2Page } from "@/test/job-search-fixtures";
 
 import { clearJobSearchCache } from "./cache";
+import { countRequest } from "./usage-store";
 import { postingDetails, searchPostings, testSource } from "./index";
 import { EMPTY_QUERY } from "./search";
 import { sourceCovers } from "./sources";
+
+vi.mock("./usage-store", () => ({ countRequest: vi.fn(async () => {}) }));
 
 const query = { ...EMPTY_QUERY, keywords: "designer", country: "de" };
 const ninja = { key: "ak_test", host: "openwebninja" as const };
 
 beforeEach(() => {
   clearJobSearchCache();
+  vi.mocked(countRequest).mockClear();
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
 afterEach(() => {
@@ -31,6 +35,18 @@ describe("searchPostings", () => {
     await searchPostings("JSEARCH", ninja, query, first.next);
     await searchPostings("JSEARCH", ninja, { ...query, remoteOnly: true });
     expect(requests).toHaveLength(3);
+  });
+
+  it("counts a request that is sent, even a failed one, and not one answered from the cache", async () => {
+    stubFetch(() => json(jsearchV2Page));
+    await searchPostings("JSEARCH", ninja, query);
+    await searchPostings("JSEARCH", ninja, query);
+    expect(countRequest).toHaveBeenCalledTimes(1);
+    expect(countRequest).toHaveBeenCalledWith("JSEARCH");
+
+    stubFetch(() => json({}, { status: 503 }));
+    await expect(searchPostings("JSEARCH", ninja, { ...query, keywords: "other" })).rejects.toMatchObject({ problem: "unavailable" });
+    expect(countRequest).toHaveBeenCalledTimes(2);
   });
 
   it("doesn't keep failures", async () => {
@@ -84,6 +100,19 @@ describe("postingDetails", () => {
     expect(await postingDetails("JSEARCH", ninja, { ...partial, description: "" })).toBe(posting.description);
     expect(await postingDetails("JSEARCH", ninja, { ...partial, externalId: "other", description: "" })).toBeNull();
   });
+
+  it("counts a request to the source for the rest of a posting, not a cached or complete one", async () => {
+    stubFetch(() => json(jsearchV2Page));
+    const [posting] = (await searchPostings("JSEARCH", ninja, query)).postings;
+    vi.mocked(countRequest).mockClear();
+    await postingDetails("JSEARCH", ninja, posting);
+    expect(countRequest).not.toHaveBeenCalled();
+    const partial = { ...posting, complete: false };
+    await postingDetails("JSEARCH", ninja, partial);
+    await postingDetails("JSEARCH", ninja, partial);
+    expect(countRequest).toHaveBeenCalledTimes(1);
+    expect(countRequest).toHaveBeenCalledWith("JSEARCH");
+  });
 });
 
 describe("testSource", () => {
@@ -95,5 +124,6 @@ describe("testSource", () => {
   it("throws the problem when it doesn't", async () => {
     stubFetch(() => json({}, { status: 401 }));
     await expect(testSource("JSEARCH", ninja)).rejects.toMatchObject({ problem: "key" });
+    expect(countRequest).toHaveBeenCalledWith("JSEARCH");
   });
 });

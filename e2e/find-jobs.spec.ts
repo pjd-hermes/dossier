@@ -83,10 +83,11 @@ test("says when nothing was found", async ({ page }) => {
 
 test("tests the connection in Settings → Job search", async ({ page }) => {
   await page.goto("/settings?section=jobs");
-  await expect(page.getByRole("radio", { name: "JSearch" })).toBeChecked();
+  await expect(page.getByRole("switch", { name: "Use JSearch" })).toBeChecked();
   await expect(page.getByLabel("API key")).toHaveAttribute("placeholder", "Using DOSSIER_JSEARCH_KEY · type one to save it here");
-  await page.getByRole("button", { name: "Test connection" }).click();
-  await expect(page.getByText(/^Connected · JSearch answered in/)).toBeVisible();
+  const jsearch = page.getByRole("group", { name: "JSearch" });
+  await jsearch.getByRole("button", { name: "Test connection" }).click();
+  await expect(jsearch.getByText(/^Connected · JSearch answered in/)).toBeVisible();
 });
 
 test("scores a posting against the profile, and keeps the score (#208)", async ({ page }) => {
@@ -110,4 +111,32 @@ test("scores a posting against the profile, and keeps the score (#208)", async (
   await expect(page.getByText("Excellent fit · 91 of 100")).toBeVisible();
   await expect(page.getByRole("button", { name: "Score again" })).toBeVisible();
   await sql(`DELETE FROM "PostingScore"`);
+});
+
+test("searches FreeHire, which needs no key and has no radius", async ({ page }) => {
+  const sourcesOn = async () => (await sql<{ value: string }>(`SELECT value FROM "Setting" WHERE key = 'jobSourcesOn'`))[0]?.value;
+  await page.goto("/settings?section=jobs");
+  // With FreeHire on beside JSearch, Find jobs offers both.
+  await page.getByRole("switch", { name: "Use FreeHire" }).click();
+  await expect.poll(sourcesOn).toBe('["JSEARCH","FREEHIRE"]');
+  await expect(page.getByText("No key needed. Dossier searches FreeHire's public catalogue at freehire.me.")).toBeVisible();
+
+  await page.goto("/jobs?q=product+designer&where=Rotterdam&country=nl");
+  const form = page.getByRole("search", { name: "Search postings" });
+  await expect(page.getByRole("radio", { name: "JSearch" })).toBeChecked();
+  await page.getByRole("radio", { name: "FreeHire" }).click();
+  await expect(form.getByLabel("Within")).toBeDisabled();
+  await expect(form.getByText("FreeHire has no distance filter")).toBeVisible();
+  await form.getByRole("button", { name: "Search" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Senior Product Designer, Payments" })).toBeVisible();
+  await expect(page.getByText(/^1 posting from FreeHire · searched/)).toBeVisible();
+  // Its whole text came with the search.
+  await expect(page.getByRole("region", { name: "Posting text" })).toContainText("for its payments team");
+  await expect(page.getByText("Jobs by FreeHire").last()).toBeVisible();
+
+  // Back to JSearch alone, as the environment sets it, for the tests after.
+  await page.goto("/settings?section=jobs");
+  await page.getByRole("switch", { name: "Use FreeHire" }).click();
+  await expect.poll(sourcesOn).toBe('["JSEARCH"]');
+  await sql(`DELETE FROM "Setting" WHERE key = 'jobSource'`);
 });

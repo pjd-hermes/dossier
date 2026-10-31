@@ -8,7 +8,7 @@ import { savePosting } from "@/lib/postings";
 import { encryptSecret, JOB_SOURCE_KEY } from "@/lib/secrets";
 import { saveSettings } from "@/lib/settings-data";
 import { createTestClient, resetDatabase } from "@/test/db";
-import { jsearchV2LastPage, jsearchV2Page } from "@/test/job-search-fixtures";
+import { adzunaPage, jsearchV2LastPage, jsearchV2Page } from "@/test/job-search-fixtures";
 
 import { countSearches, listSearches, loadSearch, removeSearch, runSearch, showMoreFor } from "./posting-searches";
 
@@ -51,6 +51,24 @@ describe("runSearch", () => {
     expect(requests[0].headers.get("x-api-key")).toBe("ak_test");
     const kept = await prisma().postingSearch.findUniqueOrThrow({ where: { id: result.ok ? result.id : "" } });
     expect(kept).toMatchObject({ source: "JSEARCH", query, found: 2, next: "cursor:CURSOR-PAGE-2" });
+  });
+
+  it("searches the provider it's given when that one is on, and remembers it for Find jobs", async () => {
+    await saveSettings({ jobSource: "JSEARCH", jobSourcesOn: ["JSEARCH", "ADZUNA"], jsearchKeyEnc: encryptSecret(JOB_SOURCE_KEY, "ak_test"), adzunaAppId: "app1", adzunaKeyEnc: encryptSecret(JOB_SOURCE_KEY, "az_test") });
+    const requests = stubFetch(() => json(adzunaPage));
+    const result = await runSearch(query, "ADZUNA");
+    expect(requests[0].url.host).toBe("api.adzuna.com");
+    expect(await prisma().postingSearch.findFirstOrThrow()).toMatchObject({ source: "ADZUNA" });
+    expect((await prisma().setting.findUniqueOrThrow({ where: { key: "jobSource" } })).value).toBe("ADZUNA");
+    expect(result).toEqual({ ok: true, id: expect.any(String) });
+  });
+
+  it("won't search a provider that's off, and sends nothing", async () => {
+    await useJSearch();
+    const requests = stubFetch(() => json(adzunaPage));
+    expect(await runSearch(query, "ADZUNA")).toEqual({ ok: false, problem: "off", message: "Turn Adzuna on in Settings → Job search first." });
+    expect(requests).toHaveLength(0);
+    expect(await countSearches()).toBe(0);
   });
 
   it("keeps nothing when the source says no", async () => {
