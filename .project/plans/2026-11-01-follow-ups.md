@@ -1,6 +1,7 @@
 # Design and plan: follow-up reminders (roadmap step 6)
 
-Status: draft for PJ's review. No code written yet. Base: fork main with Dossier 1.11.0.
+Status: decisions taken, ready to build. No code written yet.
+Decided by PJ on 2026-10-31: draft only when Follow up is pressed; Close it out archives; cadence 7, 14, then close-out at 21 (scaled by the quiet-days setting). Base: fork main with Dossier 1.11.0.
 
 ## What upstream already does
 

@@ -1,6 +1,7 @@
 # Design and plan: duplicate and ghost-job detection (roadmap step 7)
 
-Status: draft for PJ's review. No code written yet. Base: fork main with Dossier 1.11.0.
+Status: decisions taken, ready to build. No code written yet.
+Decided by PJ on 2026-10-31: the agent skips postings older than 60 days (setting, 0 turns it off). The other recommendations below stand unless PJ changes them. Base: fork main with Dossier 1.11.0.
 
 ## What exists, and the gap
 
