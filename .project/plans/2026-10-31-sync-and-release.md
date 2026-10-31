@@ -5,20 +5,18 @@ Status: draft for PJ's review. No code written yet.
 ## Goal
 
 1. One command to bring an upstream release into the fork, following the steps already in `FORK.md`.
-2. Pushing a tag like `v1.11.0-pjd.1` builds and publishes the fork's image and a GitHub release whose notes say which upstream release it carries.
+2. Release notes that say which upstream release a fork release carries.
 
-## Version format
+The tag format and the release workflow come from PR #4 (agreed earlier), not from this plan.
 
-`<upstream version>-pjd.<n>`, for example `v1.11.0-pjd.1`. The upstream part says what it includes; `n` counts the fork's own releases on top of that upstream version and restarts at 1 after each sync. This is valid semver (a pre-release suffix), so tools sort it correctly.
+## Version format (from PR #4)
 
-Open question for PJ: the first release. The fork is on upstream 1.10.0 now, so either cut `v1.10.0-pjd.1` from today's main, or sync 1.11.0 first and cut `v1.11.0-pjd.1`. Recommended: sync first, so the first release isn't already out of date.
+`v<upstream version>-pjd.<fork semver>`, for example `v1.10.0-pjd.0.1.0`. `-` is used because Docker tags can't hold `+`. `package.json` stays at the upstream version; the fork version lives only in the tag. `release.yml` gets the fork added to its `if:` (PR #4), so no separate fork workflow is needed.
 
 ## Facts about the repo
 
-- `package.json` version is `1.10.0` (upstream's). Upstream bumps it in each release commit. The fork leaves it alone, so syncs don't conflict; the fork version lives only in the git tag.
-- `.github/workflows/ci.yml` already builds and pushes `ghcr.io/pjd-hermes/dossier:<sha>` on every push to main after checks pass.
-- `.github/workflows/release.yml` waits for that image and tags it with the version, but is gated by `if: github.repository == 'AienTech/dossier'`, so it never runs on the fork. It also fires on any `v*` tag, so it would see our tags (and skip).
-- Rule 1 in `FORK.md`: new logic in new files, so don't edit `release.yml`.
+- `.github/workflows/ci.yml` builds and pushes `ghcr.io/pjd-hermes/dossier:<sha>` on every push to main after checks pass.
+- `release.yml` waits for that image, tags it with the version and `latest`, and creates the release from the annotated tag's message. PR #4 lets it run on the fork.
 
 ## Tasks
 
@@ -35,30 +33,20 @@ Automates the `FORK.md` steps. It takes the upstream tag as its argument (defaul
 
 Test: a bats-style or shell test against a throwaway local repo with a fake `upstream` remote (clean merge, conflict, dirty tree, unknown tag).
 
-### Task 2: `.github/workflows/release-fork.yml`
-
-New file, trigger `push: tags: ["v*-pjd.*"]`, gated by `github.repository == 'pjd-hermes/dossier'`.
-
-- Same "wait for the commit's image" step as upstream (CI builds `:<sha>` on main).
-- Tag the image `ghcr.io/pjd-hermes/dossier:<tag>` and `:latest-pjd`. It must not move `:latest`, which stays unused.
-- Check that the tag's commit is on `main` (`git merge-base --is-ancestor`); fail otherwise.
-- Parse the upstream version from the tag, confirm the upstream tag `v<upstream>` is an ancestor of the commit (so the release really contains it), and fail if not.
-- Create the GitHub release with generated notes (Task 3).
-
-### Task 3: release notes
+### Task 2: release notes
 
 `scripts/fork/release-notes.sh <tag>` builds the notes:
 
-- Header line: "Dossier <upstream> + fork changes (pjd.<n>)".
+- Header line: "Dossier <upstream> + fork changes (<fork version>)".
 - "Includes upstream" section: link to upstream's release for `v<upstream>`.
-- "Fork changes since the previous -pjd tag": `git log --first-parent` subjects between the previous `-pjd` tag (or the upstream tag, for `.1`).
+- "Fork changes since the previous -pjd tag": `git log --first-parent` subjects between the previous `-pjd` tag (or the upstream tag, for the first one on an upstream version).
 - Upgrade line with the image reference.
 
-The release workflow calls it, so the notes can be checked locally before tagging.
+Use it to write the annotated tag's message (`git tag -a <tag> -F <(scripts/fork/release-notes.sh <tag>)`), since `release.yml` uses that message as the release notes. It also fails if the upstream tag named in the version isn't an ancestor of the commit, so a release can't claim an upstream release it doesn't contain.
 
-### Task 4: docs
+### Task 3: docs
 
-- `FORK.md`: add "Releasing" (version format, how to cut a tag, `n` resets after a sync) and "Sync script" sections; the new files are all new, so the "Upstream files we change" table needs no rows.
+- `FORK.md`: add "Releasing" (extends PR #4's Releases section with the sync script and the notes script; the fork semver carries on across syncs) and "Sync script" sections; the new files are all new, so the "Upstream files we change" table needs no rows.
 - `DEVELOPMENT.md` is upstream's, so leave it.
 - Roadmap: link this plan from step 5, move to `done/` when finished.
 
@@ -66,7 +54,7 @@ The release workflow calls it, so the notes can be checked locally before taggin
 
 - Run the first sync (`scripts/fork/sync-upstream.sh v1.11.0`), review the PR, merge.
 - Make sure the ghcr package is readable by PJ's VM and that Actions has "Read and write" workflow permissions on the fork.
-- Push the first tag and confirm the image and release appear.
+- Push the next tag and confirm the image and release appear (PR #4 covers the first one).
 
 ## Merge-tax check
 

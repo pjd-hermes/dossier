@@ -12,7 +12,7 @@ JSearch did not find the government postings in PJ's own testing.
 | 2 | Several providers at once, and saved searches by job type (upstream issue #11, widened for the fork) | Main discovery tool for everything JSearch, Adzuna and FreeHire can see | Design: [2026-10-29-saved-searches-design.md](2026-10-29-saved-searches-design.md); plan: [2026-10-29-saved-searches.md](2026-10-29-saved-searches.md) |
 | 3 | `import_posting` MCP tool | Shared entry point for postings that come from outside the search adapters | to write |
 | 4 | Email-alert ingestion (NEOGOV Job Interest Cards first) | Covers the government postings JSearch misses; needs step 3 and the emails collected since step 1 | to write |
-| 5 | Upstream sync script and `-pjd` release workflow | Makes each upstream release (now 1.11.0) a repeatable merge, and gives every fork release a version that says which upstream it carries | [2026-10-31-sync-and-release.md](2026-10-31-sync-and-release.md) |
+| 5 | Upstream sync script and `-pjd` release workflow | Makes each upstream release (now 1.11.0) a repeatable merge, with release notes that name the upstream release. The tag format and release workflow come from PR #4 | [2026-10-31-sync-and-release.md](2026-10-31-sync-and-release.md) |
 | 6 | Follow-up reminders and stale-application nudges | Dashboard card for applications with no reply after N days, with an AI-drafted follow-up built on the inbox and Gmail code. Built together with step 7 | to write |
 | 7 | Duplicate and ghost-job detection | Several providers on at once means the same posting repeats: merge by company and title, flag long-reposted postings | to write |
 
