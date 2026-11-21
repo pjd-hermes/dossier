@@ -26,6 +26,8 @@ const PROVIDER_DEFAULTS: Record<AiProvider, { baseUrl: string; model: string | n
   [AiProvider.ANTHROPIC]: { baseUrl: "https://api.anthropic.com", model: "claude-sonnet-5-5", timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
   [AiProvider.MISTRAL]: { baseUrl: "https://api.mistral.ai/v1", model: "mistral-small-2603", timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
   [AiProvider.LMSTUDIO]: { baseUrl: "http://host.docker.internal:1234", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.local },
+  // Fork (FORK.md): retired. A saved or imported OPENCODE_GO reads as OpenAI-compatible at OpenCode Go's address.
+  [AiProvider.OPENCODE_GO]: { baseUrl: "https://opencode.ai/inference/go/v1", model: null, timeoutSeconds: DEFAULT_TIMEOUT_SECONDS.hosted },
 };
 
 const FROM_ENV: Record<NonNullable<Env["DOSSIER_AI_PROVIDER"]>, AiProvider> = {

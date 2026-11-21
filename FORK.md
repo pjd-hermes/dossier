@@ -12,6 +12,20 @@ changes that are not meant for upstream and are not offered back.
 3. Merge the release tag into a branch: `git switch -c sync/<tag>` then `git merge <tag>`.
 4. Test with `docker/bin/yarn test` (and `typecheck`, `lint`), fix what the merge broke, then merge the branch.
 
+A sync can go in steps (merge one release tag, test, merge the next on top), as 1.11.0 to 1.15.1 did through 1.13.0.
+Where the fork's own version of something was replaced by upstream's, take upstream's whole file
+(`git checkout <tag> -- <file>`): a half-merged file is worse than either side. Then check the
+[files we change](#upstream-files-we-change) below and keep each only while the fork still needs it.
+
+### Two schemas, two migrations
+
+PostgreSQL and SQLite each have their own migrations (`prisma/migrations`, `prisma/sqlite/migrations`), and
+`prisma/sqlite/schema.prisma` is made from `prisma/schema.prisma` by `yarn sqlite-schema`: change the first,
+run that, then give both databases a migration, and a test checks that the SQLite ones make exactly its schema.
+A migration of the fork's gets a timestamp later than every migration in the upstream release it follows a
+sync of, so it runs after them on a database that's behind, and it goes in both directories. Test it the way
+`src/lib/fork-sync-migration.db.test.ts` does (the real SQL against a minimal schema, on PostgreSQL or SQLite).
+
 Never rebase: the fork's history stays as it is, and each upstream release arrives as one merge.
 
 ## Releases
@@ -24,14 +38,16 @@ release the fork is merged up to, then the fork's own semver. A `-` is used beca
 2. Push an annotated tag: `git tag -a v1.11.0-pjd.0.1.0 -m "<notes>"` then `git push origin v1.11.0-pjd.0.1.0`.
 3. `.github/workflows/release.yml` tags the image on GHCR (`ghcr.io/pjd-hermes/dossier:<tag>` and `latest`) and
    creates the GitHub release with the tag message as notes. It runs on upstream and this fork only; the
-   website workflow (`pages.yml`) stays upstream only.
+   website workflow (`pages.yml`) and the desktop app's (`desktop.yml`) stay upstream only. Upstream makes the release
+   a draft that `desktop.yml` publishes once the desktop downloads are attached; here that never runs, so the release is
+   published at once.
 
-Fork versions: `0.1.0` is the first release (upstream 1.11.0 merged, plus saved searches and multi-provider job search).
+Fork versions: `0.1.0` is the first release (upstream 1.11.0 merged, plus saved searches and multi-provider job search). The next one, `0.2.0`, is the release that has upstream 1.15.1 merged: the fork's saved searches, multi-provider job search and OpenCode Go are gone, replaced by upstream's, and a migration moves PJ's data (below).
 
 ## Rules
 
 1. New logic goes in new files. Upstream files get thin calls into them; no renames, no reformatting.
-2. Settings JSON before new tables. Only the search tag touches Prisma.
+2. Settings JSON before new tables. Nothing of the fork's touches the Prisma schema now but the one enum value below.
 3. Every upstream file changed is listed below with one line on why.
 4. Merge upstream release tags, never rebase.
 
@@ -39,90 +55,46 @@ Fork versions: `0.1.0` is the first release (upstream 1.11.0 merged, plus saved 
 
 | File | Why | Since |
 |---|---|---|
-| `src/lib/ai/providers/openai-compatible.ts` | `OPENCODE_GO` kind, `defaultHeaders` and `defaultJsonMode()` beside upstream's servers.ts; OpenCode Go keeps its own address | 1.11.0 merge |
-| `src/lib/agent/run.ts`, `src/lib/settings.ts`, `src/app/(app)/settings/agent-section.tsx`, `agent-section.test.tsx`, `page.tsx` | Saved searches kept alongside upstream's scorer (`loadPostingScorer`, `scoringProblem`, `scoring` prop) | 1.11.0 merge |
-| `.github/workflows/release.yml` | The release job also runs on this fork | First fork release |
-| `src/lib/env.ts` | The OpenCode Go AI provider in `AI_PROVIDERS` | 1.10.0 merge (70b25f1) |
-| `src/lib/ai/providers.live.test.ts` | A live check for OpenCode Go beside upstream's Anthropic one | 1.10.0 merge (70b25f1) |
-| `DEVELOPMENT.md` | The OpenCode Go live check, beside the Anthropic one | 1.10.0 merge (70b25f1) |
-| `package.json`, `yarn.lock` | The step 1 dependency patch; upstream's versions taken in the merge | 1.10.0 merge (70b25f1) |
-| `src/lib/settings.ts` | The `jobSourcesOn` setting (several job providers on at once) and `jobSourceUsage` (requests counted per provider) | Saved searches, task 1 |
-| `src/lib/settings.test.ts` | Tests for `jobSourcesOn`; `jobSourceUsage` in the defaults | Saved searches, task 1 |
-| `src/lib/job-search/config.ts` | `sourcesOn` in the job search config and its view; `source` now means Find jobs' provider | Saved searches, task 1 |
-| `src/lib/job-search/config.test.ts` | Tests for `sourcesOn` | Saved searches, task 1 |
-| `src/lib/job-search/sources.ts` | `sourcesOn` in `JobSearchSettingsView` | Saved searches, task 1 |
-| `src/app/(app)/settings/job-search-section.test.tsx` | The view fixture gains `sourcesOn` | Saved searches, task 1 |
-| `src/app/(app)/settings/actions.db.test.ts` | The view it expects after saving a source gains `sourcesOn` | Saved searches, task 1 |
-| `src/lib/data-export.ts` | `jobSourceUsage` joins `INSTALL_SETTINGS`: request counts stay out of exports | Saved searches, task 2 |
-| `src/lib/data-export.db.test.ts` | The install-settings case covers `jobSourceUsage` | Saved searches, task 2 |
-| `src/lib/job-search/index.ts` | A `countRequest` call before each request sent to a provider | Saved searches, task 2 |
-| `src/lib/job-search/index.test.ts` | Tests for the request counting | Saved searches, task 2 |
-| `src/lib/job-search/config.ts` | `jobSearchView(config, usage, now)` adds the past 30 days of requests | Saved searches, task 3 |
-| `src/lib/job-search/config.test.ts` | Tests for a saved list beating a saved Off, and for `usage` | Saved searches, task 3 |
-| `src/lib/job-search/sources.ts` | `usage` in `JobSearchSettingsView` | Saved searches, task 3 |
-| `src/app/(app)/settings/actions.ts` | `loadView` passes the saved usage | Saved searches, task 3 |
-| `src/app/(app)/settings/actions.db.test.ts` | The view it expects gains `usage` | Saved searches, task 3 |
-| `src/app/(app)/settings/page.tsx` | The initial job search view gets the saved usage | Saved searches, task 3 |
-| `src/app/(app)/settings/job-search-section.tsx` | A card per provider, each with a switch, its keys and its own test, replacing the radio choice | Saved searches, task 3 |
-| `src/app/(app)/settings/job-search-section.test.tsx` | Tests for the cards | Saved searches, task 3 |
-| `e2e/find-jobs.spec.ts` | The Settings tests use the providers' switches and cards | Saved searches, task 3 |
-| `src/lib/posting-searches.ts` | `runSearch(query, source?)` searches a provider that is on and remembers the pick | Saved searches, task 4 |
-| `src/lib/posting-searches.db.test.ts` | Tests for the picked provider | Saved searches, task 4 |
-| `src/app/(app)/jobs/actions.ts` | `runJobSearch` takes an optional `source` | Saved searches, task 4 |
-| `src/app/(app)/jobs/actions.db.test.ts` | Test for `source` | Saved searches, task 4 |
-| `src/app/(app)/jobs/page.tsx` | Passes the providers that are on and JSearch's 30-day count | Saved searches, task 4 |
-| `src/app/(app)/jobs/jobs-screen.tsx` | A "Search on" picker among the providers that are on; the Bundesagentur note follows the pick | Saved searches, task 4 |
-| `src/app/(app)/jobs/jobs-screen.test.tsx` | Tests for the picker | Saved searches, task 4 |
-| `src/lib/connector/tools.ts` | `search_jobs` takes an optional `source` | Saved searches, task 4 |
-| `src/lib/connector/tools.db.test.ts` | Test for `source` in `search_jobs` | Saved searches, task 4 |
-| `e2e/find-jobs.spec.ts` | The FreeHire test picks it in Find jobs | Saved searches, task 4 |
-| `src/lib/settings.ts` | `agentSearches` and `agentSourceCaps` settings | Saved searches, task 5 |
-| `src/lib/settings.test.ts` | Tests for the two settings | Saved searches, task 5 |
-| `src/lib/settings.ts` | `requests` on each agent run, and 30 runs kept | Saved searches, task 6 |
-| `src/lib/agent/runs.ts` | `recordRunStart` records the planned requests | Saved searches, task 6 |
-| `src/lib/settings.test.ts` | `AgentRun` fixtures gain `requests: []`, and a test for runs saved without it | Saved searches, task 6 |
-| `src/app/(app)/agent/actions.db.test.ts` | `AgentRun` fixtures gain `requests: []` | Saved searches, task 6 |
-| `src/lib/agent/run.db.test.ts` | `AgentRun` fixtures gain `requests: []` | Saved searches, task 6 |
-| `src/lib/agent/schedule.db.test.ts` | `AgentRun` fixtures gain `requests: []` | Saved searches, task 6 |
-| `src/lib/agent/view.db.test.ts` | `AgentRun` fixtures gain `requests: []` | Saved searches, task 6 |
-| `prisma/schema.prisma` | `AgentCandidate` gains `searchId`, `searchName` and an index on `searchId` | Saved searches, task 7 |
-| `src/lib/data-export.ts` | The `agentCandidate` export schema gains `searchId` and `searchName`, with defaults for older files | Saved searches, task 7 |
-| `src/lib/data-import.db.test.ts` | The candidate round trip covers the search tag and files without it | Saved searches, task 7 |
-| `src/app/(app)/settings/delete-everything.db.test.ts` | The candidate it deletes carries a search tag | Saved searches, task 7 |
-| `src/lib/agent/run.ts` | `agentSetupProblem` takes the settings and config; `runAgentScan` runs every saved search on every provider through the planner; `agentQueryReady` removed | Saved searches, task 8 |
-| `src/lib/agent/candidates.ts` | `candidateData` takes the saved search and stores `searchId`/`searchName` | Saved searches, task 8 |
-| `src/lib/agent/view.ts` | Calls `agentSetupProblem` with the settings and config | Saved searches, task 8 |
-| `src/app/(app)/agent/actions.ts` | `searchReady` in place of `agentQueryReady`; Run now checks setup with the config | Saved searches, task 8 |
-| `src/lib/agent/run.db.test.ts` | A fake per provider; tests for several searches and providers, caps, skipped and failing providers | Saved searches, task 8 |
-| `src/lib/agent/candidates.db.test.ts` | `candidateData` with a search; test for the search tag | Saved searches, task 8 |
-| `src/lib/agent/draft.db.test.ts` | `candidateData` with a search | Saved searches, task 8 |
-| `src/lib/agent/view.db.test.ts` | Config fake gains `sourcesOn`; the new setup message | Saved searches, task 8 |
-| `src/app/(app)/agent/actions.db.test.ts` | Config fake gains `sourcesOn`; the new setup messages and order | Saved searches, task 8 |
-| `src/app/(app)/agent/actions.ts` | `saveAgentSettings` drops `query`; turning the agent on needs a runnable saved search | Saved searches, task 9 |
-| `src/app/(app)/agent/actions.db.test.ts` | The turn-on test follows the new rule | Saved searches, task 9 |
-| `src/app/(app)/settings/agent-section.tsx` | "What it looks for" card becomes Saved searches and Searches per provider; intro, footer and warning copy | Saved searches, task 9 |
-| `src/app/(app)/settings/agent-section.test.tsx` | Tests follow the saved searches, the new copy and the turn-on refusal | Saved searches, task 9 |
-| `src/app/(app)/settings/page.tsx` | Passes the saved searches, caps, agent providers and runs to the Job agent section | Saved searches, task 9 |
-| `e2e/agent.spec.ts` | Adds a saved search through the new UI before turning the agent on | Saved searches, task 9 |
-| `src/lib/agent/view.ts` | `search` becomes `searchSummary`; candidates carry their search; `filters` | Saved searches, task 10 |
-| `src/lib/agent/view.db.test.ts` | Tests follow the summary, the tags and the filters | Saved searches, task 10 |
-| `src/app/(app)/agent/agent-screen.tsx` | Search chip on each posting, filter buttons, the summary | Saved searches, task 10 |
-| `src/app/(app)/agent/agent-screen.test.tsx` | Tests for the chips and the filter | Saved searches, task 10 |
-| `src/lib/agent/run.ts` | Sends a provider the search's query alone, so Find jobs' cache can answer it; stops sending requests once the run is cancelled | Saved searches, task 11 |
-| `src/lib/agent/run.db.test.ts` | Tests for the query a provider is sent and for cancelling between requests | Saved searches, task 11 |
-| `DEVELOPMENT.md` | Job search and Job agent sections: several providers on, request counts, saved searches, caps per provider, `requests` on each run | Saved searches, task 11 |
-| `README.md` | The job agent runs the saved searches on the providers that are on | Saved searches, task 11 |
-| `src/lib/settings.ts` | The job agent comment names the saved searches and the providers that are on | Saved searches, task 11 |
-| `src/lib/agent/jobs.ts` | The `agent-scan` comment says what a run sends now | Saved searches, task 11 |
-| `src/lib/job-search/search.ts` | The `JOB_SOURCES` comment: several can be on | Saved searches, task 11 |
-| `src/lib/job-search/find.ts` | The `askSource` comment names Find jobs' provider | Saved searches, task 11 |
-| `src/lib/agent/run.ts` | Plans with the user's time zone, so caps count per calendar day; "Nothing to search until tomorrow." | Saved searches, final fixes |
-| `src/lib/agent/run.db.test.ts` | Tests for the cap per calendar day, and the new "used up for today" message | Saved searches, final fixes |
-| `src/app/(app)/settings/agent-section.tsx` | Passes the time zone to the next-run preview | Saved searches, final fixes |
-| `DEVELOPMENT.md` | Caps per provider count per calendar day in the user's time zone | Saved searches, final fixes |
+| `.github/workflows/release.yml` | The release job also runs on this fork; the desktop job (and the draft it publishes) stays upstream only | First fork release; again on the 1.15.1 sync |
+| `.github/workflows/pages.yml` | The website is published from upstream only | Fork's first workflow change; again on the 1.15.1 sync |
+| `.github/workflows/desktop.yml` | The desktop app's downloads are built upstream only | 1.15.1 sync |
+| `src/lib/ai/config.ts`, `src/lib/ai/index.ts`, `src/lib/ai/provider-options.ts` | A stray `OPENCODE_GO` (from an export made before the sync) reads as OpenAI-compatible at OpenCode Go's address, because the enum still has the value and these are exhaustive over it | 1.15.1 sync |
+| `prisma/schema.prisma`, `prisma/sqlite/schema.prisma` | `OPENCODE_GO` stays in the `AiProvider` enum so a database that had it stays valid. Nothing writes it. The SQLite file is derived (`yarn sqlite-schema`) | 1.15.1 sync |
+
+## Files only this fork has
+
+| File | What it is |
+|---|---|
+| `FORK.md`, `.project/` | This file, and the plans and roadmap |
+| `prisma/migrations/20261027090000_ai_provider_opencode_go`, `20261030090000_agent_candidate_search` | The fork's two old migrations. Databases of the fork have run them, so they stay; the one below undoes the second |
+| `prisma/migrations/20261126090000_fork_upstream_sync`, `prisma/sqlite/migrations/20261126090000_fork_upstream_sync` | The 1.15.1 sync (see below) |
+| `src/lib/fork-sync-migration.db.test.ts` | Tests that migration, on whichever database the tests run on |
+| `src/lib/ai/retired-provider.test.ts` | Tests that a stray `OPENCODE_GO` still works |
+| `src/dependency-floor.test.ts` | Fails if the installed `next` or `sharp` is older than the floors set by their advisories |
+
+## The 1.15.1 sync migration
+
+Upstream's 1.13 to 1.15 do what the fork's saved searches, multi-provider job search and OpenCode Go did, in their
+own way: up to three Agent searches (`AgentSearch`, with `AgentCandidateSearch` for which search found a candidate),
+portals with their own agent limits, and OpenCode as one of the OpenAI-compatible servers. So the sync took upstream's
+code for all of it, and `20261126090000_fork_upstream_sync` moves PJ's data first. It's one migration for each database
+(SQLite has no candidate columns to convert, so its half is settings only):
+
+- **Saved searches:** the setting `agentSearches` (up to five) becomes `AgentSearch` rows, keeping ids and order. Upstream
+  holds three, so the first three that it can hold (an id, and keywords) are kept; the others are saved as they were in the
+  setting `agentSearchesDropped`, which nothing reads. The search made from the old single query (`agent-search-legacy`)
+  goes when a list was saved, as the list was then the whole list.
+- **Candidate tags:** `AgentCandidate.searchId` and `searchName` become `AgentCandidateSearch` rows (a dropped or removed
+  search keeps its name and loses its id), then the two columns and their index are dropped.
+- **OpenCode Go:** a saved provider `OPENCODE_GO` becomes `OPENAI`, with the address `https://opencode.ai/inference/go/v1`
+  (or the saved one, made to end in `/v1`) and the model `glm-5.3-flash` unless one was saved. The key is untouched.
+  An environment with `DOSSIER_AI_PROVIDER=opencode-go` has to change to `openai` and the address above: upstream doesn't know the old name.
+- **Job providers:** `jobSourcesOn`, `jobSourceUsage` and `agentSourceCaps` are deleted. Upstream reads the provider keys
+  (`jsearchKeyEnc`, `adzunaKeyEnc`, `adzunaAppId`) and the one source (`jobSource`) into its portals by itself, so nothing is
+  lost there; of the providers that were on together the first becomes `jobSource` (when none was chosen), and the others
+  are switched on again in Settings -> Job search.
 
 ## Kept on purpose
 
-- `saveJobSource` and `testJobSource` in `src/app/(app)/settings/actions.ts` are no longer used by any
-  screen (only their tests call them): the Job search section now turns providers on and off one by one.
-  They stay so the file stays close to upstream. Don't remove or rework them in an upstream sync.
+- Nothing at the moment. (`saveJobSource` and `testJobSource` in `settings/actions.ts`, kept before, came from the fork's
+  multi-provider search and went with it.)

@@ -27,6 +27,7 @@ export function createProvider(config: AiConfig): AIProvider {
     case AiProvider.LOCAL:
       return new LocalProvider(baseUrl, model, timeoutMs, recordUsage);
     case AiProvider.OPENAI:
+    case AiProvider.OPENCODE_GO: // Fork (FORK.md): retired, same as OpenAI-compatible.
       return new OpenAICompatibleProvider("OPENAI", baseUrl, apiKey, model, timeoutMs, recordUsage);
     case AiProvider.ANTHROPIC:
       return new AnthropicProvider(baseUrl, apiKey, model, timeoutMs, recordUsage);

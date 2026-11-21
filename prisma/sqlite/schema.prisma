@@ -466,6 +466,9 @@ enum AiProvider {
   MISTRAL
   /// LM Studio on the user's own hardware (#210).
   LMSTUDIO
+  /// Retired in this fork: the sync migration turns saved OpenCode Go settings into OPENAI with its address.
+  /// The value stays so migrated databases remain valid; nothing writes it.
+  OPENCODE_GO
 }
 
 enum Creativity {

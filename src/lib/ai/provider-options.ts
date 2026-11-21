@@ -87,7 +87,9 @@ export const PROVIDER_OPTIONS: readonly {
 ];
 
 export function providerOption(provider: AiProvider) {
-  return PROVIDER_OPTIONS.find((option) => option.value === provider)!;
+  // Fork (FORK.md): the retired OPENCODE_GO is shown as OpenAI-compatible.
+  const shown = provider === AiProvider.OPENCODE_GO ? AiProvider.OPENAI : provider;
+  return PROVIDER_OPTIONS.find((option) => option.value === shown)!;
 }
 
 /** What one AI request may take, in seconds, unless Settings or DOSSIER_AI_TIMEOUT_SECONDS says otherwise. */

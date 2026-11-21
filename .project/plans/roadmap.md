@@ -9,12 +9,12 @@ JSearch did not find the government postings in PJ's own testing.
 | # | Step | Why this order | Plan |
 |---|---|---|---|
 | 1 | Patch, bring in upstream PR #19 (OpenCode Go), deploy, and sign up for alerts | Closes the live Next.js advisories before anything is exposed; alert emails start collecting for step 4 | [2026-10-28-patch-next-sharp.md](2026-10-28-patch-next-sharp.md) |
-| 2 | Several providers at once, and saved searches by job type (upstream issue #11, widened for the fork) | Main discovery tool for everything JSearch, Adzuna and FreeHire can see | Design: [2026-10-29-saved-searches-design.md](2026-10-29-saved-searches-design.md); plan: [2026-10-29-saved-searches.md](2026-10-29-saved-searches.md) |
+| 2 | ~~Several providers at once, and saved searches by job type (upstream issue #11, widened for the fork)~~ **Superseded by upstream 1.13 to 1.15** (synced in 1.15.1) | Upstream now has up to three Agent searches, portals that can all be on at once, and a request limit per portal, so the fork's own version was retired and PJ's saved searches were migrated (FORK.md, "The 1.15.1 sync migration"). The fork's four-and-five-search limit is now upstream's three | Retired: [design](done/2026-10-29-saved-searches-design.md), [plan](done/2026-10-29-saved-searches.md) |
 | 3 | `import_posting` MCP tool | Shared entry point for postings that come from outside the search adapters | to write |
 | 4 | Email-alert ingestion (NEOGOV Job Interest Cards first) | Covers the government postings JSearch misses; needs step 3 and the emails collected since step 1 | to write |
-| 5 | Upstream sync script and `-pjd` release workflow | Makes each upstream release (now 1.11.0) a repeatable merge, with release notes that name the upstream release. The tag format and release workflow come from PR #4 | [2026-10-31-sync-and-release.md](2026-10-31-sync-and-release.md) |
+| 5 | Upstream sync script and `-pjd` release workflow | Makes each upstream release (now 1.15.1) a repeatable merge, with release notes that name the upstream release. The tag format and release workflow come from PR #4 | [2026-10-31-sync-and-release.md](2026-10-31-sync-and-release.md) |
 | 6 | Follow-up reminders and stale-application nudges | Dashboard card for applications with no reply after N days, with an AI-drafted follow-up built on the inbox and Gmail code. Built together with step 7 | to write |
-| 7 | Duplicate and ghost-job detection | Several providers on at once means the same posting repeats: merge by company and title, flag long-reposted postings | to write |
+| 7 | ~~Duplicate and ghost-job detection~~ **Superseded by upstream 1.13 to 1.15** for duplicates (the same job from several portals is one position, and a posting's "still listed" check); flagging long-reposted postings is not checked, re-open this row if it is still wanted | Several portals on at once means the same posting repeats | Built into upstream; nothing left to write unless reposts matter |
 
 ## Ideas, TBD
 
