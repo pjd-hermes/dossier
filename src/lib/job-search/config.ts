@@ -7,8 +7,7 @@ import { loadSettings } from "@/lib/settings-data";
 
 import type { RequestContext, SourceCredentials } from "./adapter";
 import { JobSearchError, jobSearchError } from "./errors";
-import { JOB_SOURCES, type JobSource, type JSearchHost } from "./search";
-import { requestsInPastDays, SHOWN_DAYS, type JobSourceUsage } from "./usage";
+import type { JobSource, JSearchHost } from "./search";
 import { ARBEITSAGENTUR_NOTE, FREEHIRE_URL, SOURCE_INFO, type JobKeyState, type JobSearchSettingsView } from "./sources";
 
 // Which job source to search, and with which key (E14-4): what's saved in
@@ -16,9 +15,7 @@ import { ARBEITSAGENTUR_NOTE, FREEHIRE_URL, SOURCE_INFO, type JobKeyState, type 
 // key, so a key only ever goes to the source it's for.
 
 export type JobSearchConfig = {
-  /** The providers that are on, in provider order; empty while job search is off. */
-  sourcesOn: JobSource[];
-  /** Find jobs' provider: the saved or environment choice when it's on, else the first one on; null while none is. */
+  /** The source in effect; null while job search is off. */
   source: JobSource | null;
   /** Whether the choice is saved in Settings, rather than coming from DOSSIER_JOBS_SOURCE. */
   saved: boolean;
@@ -33,7 +30,7 @@ export type JobSearchConfig = {
   freehire: { url: string };
 };
 
-type SavedJobSettings = Pick<SettingsData, "jobSource" | "jobSourcesOn" | "jsearchKeyEnc" | "jsearchHost" | "adzunaAppId" | "adzunaKeyEnc" | "arbeitsagenturAcceptedAt">;
+type SavedJobSettings = Pick<SettingsData, "jobSource" | "jsearchKeyEnc" | "jsearchHost" | "adzunaAppId" | "adzunaKeyEnc" | "arbeitsagenturAcceptedAt">;
 type JobEnv = Pick<
   Env,
   | "DOSSIER_JOBS_SOURCE"
@@ -70,12 +67,9 @@ export function resolveJobSearchConfig(saved: SavedJobSettings, source: JobEnv, 
   const jsearchKey = keyOf(saved.jsearchKeyEnc, source.DOSSIER_JSEARCH_KEY, secret);
   const offered = source.DOSSIER_JOBS_ARBEITSAGENTUR !== "off";
   const chosen = saved.jobSource ? (saved.jobSource === "OFF" ? null : saved.jobSource) : source.DOSSIER_JOBS_SOURCE ? FROM_ENV[source.DOSSIER_JOBS_SOURCE] : null;
-  // Without a saved list, the one chosen provider is the only one on. A BA choice saved before the server turned it off counts as Off.
-  const wanted = saved.jobSourcesOn ?? (chosen ? [chosen] : []);
-  const sourcesOn = JOB_SOURCES.filter((name) => wanted.includes(name) && (name !== "ARBEITSAGENTUR" || offered));
   return {
-    sourcesOn,
-    source: chosen && sourcesOn.includes(chosen) ? chosen : (sourcesOn[0] ?? null),
+    // A BA choice saved before the server turned it off counts as Off.
+    source: chosen === "ARBEITSAGENTUR" && !offered ? null : chosen,
     saved: saved.jobSource !== null,
     jsearch: {
       ...jsearchKey,
@@ -106,17 +100,14 @@ export function arbeitsagenturStartupNotice(config: JobSearchConfig): string | n
   return `Job search: DOSSIER_JOBS_SOURCE chooses the Bundesagentur für Arbeit. ${ARBEITSAGENTUR_NOTE}${waiting}`;
 }
 
-/** What Settings → Job search shows: the source and the keys' states, never the keys, and the requests sent in the past 30 days. */
-export function jobSearchView(config: JobSearchConfig, usage: JobSourceUsage = {}, now = new Date()): JobSearchSettingsView {
-  const used = JOB_SOURCES.map((name) => [name, requestsInPastDays(usage, name, SHOWN_DAYS, now)] as const).filter(([, count]) => count > 0);
+/** What Settings → Job search shows: the source and the keys' states, never the keys. */
+export function jobSearchView(config: JobSearchConfig): JobSearchSettingsView {
   return {
     source: config.source ?? "OFF",
-    sourcesOn: config.sourcesOn,
     jsearch: { host: config.jsearch.host, keyState: config.jsearch.keyState },
     adzuna: { appId: config.adzuna.appId, keyState: config.adzuna.keyState },
     arbeitsagentur: config.arbeitsagentur,
     freehire: { host: new URL(config.freehire.url).host },
-    usage: Object.fromEntries(used),
   };
 }
 

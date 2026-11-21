@@ -4,6 +4,9 @@ import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import type { ReasoningEffort } from "openai/resources/shared";
 
+import type { UsageSink } from "@/lib/usage";
+
+import { AiError } from "../errors";
 import { BaseProvider, SCHEMA_REFUSED, withJsonSchema, type ChatAnswer, type ChatCall } from "../provider";
 import { keyGuardedFetch } from "./guarded-fetch";
 import { apiAddress, ignoresSchemas, serverAt, type Server } from "./servers";
@@ -31,6 +34,10 @@ const promptSchemas = new Set<string>();
 // A way of asking for JSON refused. OpenRouter answers 404 "No endpoints found
 // that support the provided parameters" when none of a model's hosts takes it.
 const JSON_REFUSED = /response_format|json_schema|json_object|structured|invalid schema|support the provided parameters/i;
+
+// An answer that didn't fit. OpenAI's newer models, such as gpt-6-luna,
+// refuse it with a 400 instead of sending it cut off (public PR 51).
+const NO_ROOM = /could not finish the message because max_tokens/i;
 
 /**
  * The answer's text. Some servers, Mistral's among them, send a model that
@@ -74,16 +81,15 @@ export class OpenAICompatibleProvider extends BaseProvider {
   private readonly server: Server | undefined;
 
   constructor(
-    readonly kind: "OPENAI" | "LOCAL" | "MISTRAL" | "LMSTUDIO" | "OPENCODE_GO",
+    readonly kind: "OPENAI" | "LOCAL" | "MISTRAL" | "LMSTUDIO",
     baseURL: string,
     apiKey: string | null,
     model: string | null,
     timeoutMs: number,
-    defaultHeaders?: Record<string, string>,
+    onUsage?: UsageSink,
   ) {
-    super(model, timeoutMs);
-    // OpenCode Go's provider chooses its own address (opencode-go.ts); the rewrite is for servers entered by hand.
-    this.baseURL = kind === "OPENCODE_GO" ? baseURL : apiAddress(baseURL);
+    super(model, timeoutMs, onUsage);
+    this.baseURL = apiAddress(baseURL);
     this.server = serverAt(this.baseURL);
     // Local servers often need no key, but the SDK insists on one. It isn't
     // sent, as some servers refuse a made-up one even for a public model list.
@@ -92,20 +98,14 @@ export class OpenAICompatibleProvider extends BaseProvider {
       apiKey: apiKey || "not-needed",
       timeout: timeoutMs,
       maxRetries: 1,
-      // A provider's own headers (OpenCode Go's) win over a known server's.
-      defaultHeaders: { ...(apiKey ? {} : { Authorization: null }), ...this.server?.headers?.(), ...defaultHeaders },
+      defaultHeaders: { ...(apiKey ? {} : { Authorization: null }), ...this.server?.headers?.() },
       // With a key attached, no redirects to other hosts (E11-5).
       ...(apiKey ? { fetch: keyGuardedFetch() } : {}),
     });
   }
 
-  /** The JSON mode to start with; a server that can't take a schema can override this. */
-  protected defaultJsonMode(): JsonMode {
-    return "schema";
-  }
-
   protected async chat(call: ChatCall): Promise<ChatAnswer> {
-    const key = `${this.kind} ${this.baseURL} ${call.model}`;
+    const key = `${this.baseURL} ${call.model}`;
     const schemaKey = call.json ? `${key} ${call.json.name}` : "";
     let known: Quirks = quirks.get(key) ?? {
       noTemperature: false,
@@ -113,7 +113,7 @@ export class OpenAICompatibleProvider extends BaseProvider {
       noEffort: false,
       thinks: false,
       // A server that ignores a schema silently never says so: start where the model can see it.
-      json: this.defaultJsonMode() === "prompt" || ignoresSchemas(this.baseURL, call.model) ? "prompt" : "schema",
+      json: ignoresSchemas(this.baseURL, call.model) ? "prompt" : "schema",
     };
     // A 400 or 422 naming a parameter this model doesn't take, or a gateway's
     // 404 for one: adapt and remember, once per parameter.
@@ -130,6 +130,13 @@ export class OpenAICompatibleProvider extends BaseProvider {
         const message = error instanceof OpenAI.APIError && (status === 400 || status === 404 || status === 422) ? refusal(error) : "";
         if (call.json && SCHEMA_REFUSED.test(message) && !promptSchemas.has(schemaKey)) {
           promptSchemas.add(schemaKey);
+          continue;
+        }
+        // As with an answer cut off: room for thinking, once, and from then on.
+        if (NO_ROOM.test(message)) {
+          if (known.thinks || this.thinkingRoom() === 0) throw AiError.of("cut-off");
+          known = { ...known, thinks: true };
+          quirks.set(key, known);
           continue;
         }
         const jsonRefused = call.json !== undefined && JSON_REFUSED.test(message);
@@ -192,6 +199,8 @@ export class OpenAICompatibleProvider extends BaseProvider {
       },
       { signal: call.signal },
     );
+    // Thinking is in the completion tokens. Not every server sends a usage.
+    call.used({ input: completion.usage?.prompt_tokens ?? null, output: completion.usage?.completion_tokens ?? null });
     const choice = completion.choices[0];
     // Mistral says `model_length` when the context ran out instead.
     const finish: string | undefined = choice?.finish_reason;

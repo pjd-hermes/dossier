@@ -6,14 +6,13 @@ import { extractJson, validateJson, type AIProvider } from "./provider";
 import { AnthropicProvider } from "./providers/anthropic";
 import { MockProvider } from "./providers/mock";
 import { OllamaProvider } from "./providers/ollama";
-import { OpenCodeGoProvider } from "./providers/opencode-go";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
 import { json, stubFetch, type FakeRequest } from "./test-http";
 
 afterEach(() => vi.unstubAllGlobals());
 
 const Posting = z.object({ company: z.string(), years: z.number() });
-const ask = { system: "Extract.", messages: [{ role: "user" as const, content: "Ledgerly wants 5 years." }], schema: Posting };
+const ask = { task: "extract-posting" as const, system: "Extract.", messages: [{ role: "user" as const, content: "Ledgerly wants 5 years." }], schema: Posting };
 
 describe("extractJson", () => {
   it("reads plain JSON", () => {
@@ -71,13 +70,6 @@ const harnesses: Harness[] = [
     make: () => new OpenAICompatibleProvider("OPENAI", `https://llm-${Math.random()}.example/v1`, "sk", "gpt-x", 60_000),
     respond: (content, cutOff) =>
       json({ id: "c", object: "chat.completion", created: 0, model: "gpt-x", choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: cutOff ? "length" : "stop" }] }),
-    conversation: (request) => (request.body as { messages: unknown[] }).messages,
-  },
-  {
-    name: "OpenCode Go",
-    make: () => new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk", "glm-5.3-flash", 60_000),
-    respond: (content, cutOff) =>
-      json({ id: "c", object: "chat.completion", created: 0, model: "glm-5.3-flash", choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: cutOff ? "length" : "stop" }] }),
     conversation: (request) => (request.body as { messages: unknown[] }).messages,
   },
   {

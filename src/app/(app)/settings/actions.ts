@@ -6,6 +6,7 @@ import { z } from "zod";
 
 import { AiProvider, Creativity, DateFormat, JobStatus, PaperSize, Tone } from "@/generated/prisma/enums";
 import { action, ActionError } from "@/lib/action";
+import { lockAgentSearches } from "@/lib/agent/searches";
 import { AiError, createProvider } from "@/lib/ai";
 import { applyApiKeyChange } from "@/lib/ai/api-key";
 import { keyStateOf, loadAiConfig, resolveAiConfig } from "@/lib/ai/config";
@@ -28,7 +29,7 @@ import { askJev } from "@/lib/scoring/typesafe";
 import { applySecretChange, JOB_SOURCE_KEY, TYPESAFE_KEY } from "@/lib/secrets";
 
 import { seedBuiltIns } from "../../../../prisma/seed/built-ins";
-import { isJobRetention } from "@/lib/settings";
+import { DOCUMENTS_TO_WRITE, isJobRetention } from "@/lib/settings";
 import { loadSettings, saveSettings } from "@/lib/settings-data";
 
 // Settings → AI provider (E6-3). Every field saves on its own, so a test
@@ -114,7 +115,7 @@ export const testAiConnection = action(z.object({}), async () => {
 // Settings → Job search (E14-4). Every field saves on its own; each returns
 // what the section shows, never a key.
 
-const loadView = async () => jobSearchView(await loadJobSearchConfig(), (await loadSettings()).jobSourceUsage);
+const loadView = async () => jobSearchView(await loadJobSearchConfig());
 
 /**
  * Picks the source to search, or Off. The Bundesagentur für Arbeit only with
@@ -239,7 +240,7 @@ export const updateSettings = action(
       .optional(),
     fileNamePattern: z.string().max(200).optional(),
     includeRefs: z.boolean().optional(),
-    pageLimit: z.enum(["1", "2", "none"]).optional(),
+    documentsToWrite: z.enum(DOCUMENTS_TO_WRITE).optional(),
     nightlyBackup: z.boolean().optional(),
     jobRetentionHours: z.number().refine(isJobRetention).optional(),
     updateCheck: z.boolean().optional(),
@@ -285,7 +286,10 @@ export const deleteEverything = action(z.object({ confirm: z.literal("DELETE") }
   await disconnectGoogle().catch(() => {});
 
   await prisma.$transaction(async (tx) => {
+    await lockAgentSearches(tx);
     await tx.job.deleteMany();
+    // The tokens each AI request used (#290).
+    await tx.aiUsage.deleteMany();
     // Find jobs' postings and past searches (E14-9, E14-10).
     await tx.posting.deleteMany();
     await tx.postingSearch.deleteMany();
@@ -293,6 +297,7 @@ export const deleteEverything = action(z.object({ confirm: z.literal("DELETE") }
     await tx.claudePaste.deleteMany();
     // What the job agent found (E16).
     await tx.agentCandidate.deleteMany();
+    await tx.agentSearch.deleteMany();
     await tx.postingScore.deleteMany();
     // Startups, and the fingerprints of ones removed for good (#222).
     await tx.startup.deleteMany();
@@ -306,8 +311,10 @@ export const deleteEverything = action(z.object({ confirm: z.literal("DELETE") }
     await tx.skill.deleteMany();
     await tx.language.deleteMany();
     await tx.education.deleteMany();
+    await tx.certification.deleteMany();
     await tx.publication.deleteMany();
     await tx.reference.deleteMany();
+    await tx.customSection.deleteMany();
     await tx.fact.deleteMany();
     await tx.profileField.deleteMany();
     await tx.theme.deleteMany({ where: { builtIn: false } });

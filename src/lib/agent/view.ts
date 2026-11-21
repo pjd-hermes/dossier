@@ -2,24 +2,27 @@ import "server-only";
 
 import { AgentCandidateStatus, JobStatus } from "@/generated/prisma/enums";
 import { formatDateTime } from "@/lib/dates";
-import { loadJobSearchConfig } from "@/lib/job-search/config";
-import { agentSources } from "@/lib/job-search/providers-on";
 import { postedAgo, type JobSource } from "@/lib/job-search/search";
 import { SOURCE_INFO } from "@/lib/job-search/sources";
 import { prisma } from "@/lib/prisma";
 import { loadSettings } from "@/lib/settings-data";
 import { lastKnownTimeZone } from "@/lib/time-zone";
+import type { AgentSearchRun } from "@/lib/settings";
 
 import { stringsOf } from "./candidates";
 import { AGENT_JOB_KEY } from "./jobs";
 import { agentSetupProblem } from "./run";
-import { AGENT_MAX_RUNS_PER_DAY, runsInPastDay } from "./runs";
+import { interruptedRunMessage, nextSourceBudgetAt, sourceRequestsInPastDay } from "./runs";
 import { nextAgentRun } from "./schedule";
-import { runnableSearches, searchesOf } from "./searches";
+import { listAgentSearches } from "./searches";
+import type { SavedAgentSearch } from "./search";
+import { isAgentScanRunning } from "./scan-lock";
 
 // What the Agent screen shows (E16-6).
 
 export type AgentCandidateView = {
+  /** Historical names survive renames/deletion; searchId can be null. */
+  searches: { searchId: string | null; searchName: string }[];
   id: string;
   title: string;
   company: string;
@@ -38,24 +41,25 @@ export type AgentCandidateView = {
   applicationId: string | null;
   /** The job preparing its draft, while one is queued or running. */
   draftJobId: string | null;
-  /** The saved search that found it: its current name, else the one stored with it; null for older postings. */
-  search: { id: string; name: string } | null;
 };
 
 export type AgentView = {
+  /** Recurring search collection, including disabled searches, in run order. */
+  searches: SavedAgentSearch[];
+  sourceRequestsUsed: number;
+  nextEligibility: string;
+  timeZone: string;
+  searchHistory: (AgentSearchRun & { at: string; batchMessage: string | null })[];
+  searchResults: AgentSearchRun[];
   enabled: boolean;
   autoDraft: boolean;
   minScore: number;
   maxScores: number;
   maxDrafts: number;
-  /** "3 saved searches on JSearch, Adzuna and FreeHire", or null without a runnable search. */
-  searchSummary: string | null;
-  /** One per search among the waiting postings, in saved-search order, removed ones last by name; empty with fewer than two. */
-  filters: { id: string; name: string; count: number }[];
-  /** Why it can't run: no saved search, provider or AI provider; null when it's set up. */
+  /** Why it can't run: no search, scorer, source or key; null when it's set up. */
   setupProblem: string | null;
   /** Which settings section fixes it. */
-  setupSection: "agent" | "ai" | "jobs" | null;
+  setupSection: "agent" | "ai" | "jobs" | "scoring" | null;
   /** The daily limit is used up. */
   limitReached: boolean;
   lastRun: { at: string; message: string | null } | null;
@@ -87,49 +91,37 @@ export async function countAgentQueue(): Promise<number> {
 const posted = (ago: string) => (ago === "Today" || ago === "Yesterday" ? ago.toLowerCase() : ago);
 
 const sectionOf = (problem: string): AgentView["setupSection"] =>
-  problem.includes("AI provider") ? "ai" : problem.includes("Job search") ? "jobs" : "agent";
-
-/** The filter buttons: the searches the waiting postings came from, saved ones in order, removed ones after by name. */
-function searchFilters(waiting: AgentCandidateView[], order: string[]): AgentView["filters"] {
-  const found = new Map<string, { id: string; name: string; count: number }>();
-  for (const { search } of waiting) {
-    if (!search) continue;
-    const entry = found.get(search.id) ?? { ...search, count: 0 };
-    entry.count += 1;
-    found.set(search.id, entry);
-  }
-  if (found.size < 2) return [];
-  const rank = (id: string) => (order.includes(id) ? order.indexOf(id) : order.length);
-  return [...found.values()].sort((a, b) => rank(a.id) - rank(b.id) || (rank(a.id) === order.length ? a.name.localeCompare(b.name) : 0));
-}
+  problem.includes("AI provider") ? "ai" : problem.includes("Scoring") ? "scoring" : problem.includes("Job search") ? "jobs" : "agent";
 
 export async function loadAgentView(now = new Date()): Promise<AgentView> {
-  const [settings, config, timeZone, candidates, draftJobs, runJobs] = await Promise.all([
+  const [settings, timeZone, candidates, draftJobs, runJobs, searches] = await Promise.all([
     loadSettings(),
-    loadJobSearchConfig(),
     lastKnownTimeZone(),
     prisma.agentCandidate.findMany({
       where: { status: { in: [AgentCandidateStatus.SCORED, AgentCandidateStatus.DRAFTING, AgentCandidateStatus.DRAFTED] } },
       orderBy: [{ score: "desc" }, { createdAt: "desc" }],
+      include: { searches: { orderBy: [{ createdAt: "asc" }, { id: "asc" }], select: { searchId: true, searchName: true } } },
     }),
     prisma.job.findMany({
       where: { type: "agent-draft", status: { in: [JobStatus.QUEUED, JobStatus.RUNNING] } },
       select: { id: true, key: true },
     }),
     prisma.job.findMany({ where: { key: AGENT_JOB_KEY, status: { in: [JobStatus.QUEUED, JobStatus.RUNNING] } }, select: { id: true }, take: 1 }),
+    listAgentSearches(),
   ]);
+  // Present an interrupted reservation even when quota prevents another run.
+  // This is read-only: taking the scan lock on render can reject the very job
+  // a Run now action has just started. The next scan persists reconciliation
+  // while owning execution. A queued/live job keeps its pending outcome.
+  if (!runJobs.length && settings.agentRuns.some((run) => run.message === null) && !await isAgentScanRunning()) {
+    for (const run of settings.agentRuns) if (run.message === null) run.message = interruptedRunMessage(run);
+  }
   const draftJob = new Map(draftJobs.map((job) => [job.key?.replace(/^agent-candidate:/, ""), job.id]));
 
-  const searches = searchesOf(settings);
-  const runnable = runnableSearches(searches);
-  const names = agentSources(config).map((source) => SOURCE_INFO[source].name);
-  const searchSummary =
-    runnable.length > 0 && names.length > 0
-      ? `${runnable.length} saved ${runnable.length === 1 ? "search" : "searches"} on ${names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : names[0]}`
-      : null;
-  const setupProblem = await agentSetupProblem(settings, config);
+  const setupProblem = await agentSetupProblem();
 
   const view = (candidate: (typeof candidates)[number]): AgentCandidateView => ({
+    searches: candidate.searches,
     id: candidate.id,
     title: candidate.title.trim() || "Untitled posting",
     company: candidate.company.trim(),
@@ -148,30 +140,37 @@ export async function loadAgentView(now = new Date()): Promise<AgentView> {
     error: candidate.error,
     applicationId: candidate.applicationId,
     draftJobId: draftJob.get(candidate.id) ?? null,
-    search: candidate.searchId ? { id: candidate.searchId, name: searches.find((search) => search.id === candidate.searchId)?.name ?? candidate.searchName } : null,
   });
   const drafts = candidates.filter((candidate) => candidate.status === AgentCandidateStatus.DRAFTED && candidate.applicationId).map(view);
   const waiting = candidates.filter((candidate) => candidate.status !== AgentCandidateStatus.DRAFTED);
-  const scored = waiting.filter((candidate) => candidate.score >= settings.agentMinScore).map(view);
-  const belowMinimum = waiting.filter((candidate) => candidate.score < settings.agentMinScore).map(view);
   const last = settings.agentRuns[0];
+  const requests = searches.filter((search) => search.enabled).length;
+  const eligible = nextSourceBudgetAt(settings.agentRuns, now, Math.max(1, requests));
 
   return {
+    searches,
+    sourceRequestsUsed: sourceRequestsInPastDay(settings.agentRuns, now),
+    nextEligibility: eligible > now ? formatDateTime(eligible, timeZone, now) : "Now",
+    timeZone,
+    searchHistory: searches.flatMap((search) => {
+      const run = settings.agentRuns.find((run) => run.searches?.some((result) => result.searchId === search.id));
+      const result = run?.searches?.find((result) => result.searchId === search.id);
+      return run && result ? [{ ...result, at: formatDateTime(new Date(run.at), timeZone, now), batchMessage: run.message }] : [];
+    }),
+    searchResults: last?.searches ?? [],
     enabled: settings.agentEnabled,
     autoDraft: settings.agentAutoDraft,
     minScore: settings.agentMinScore,
     maxScores: settings.agentMaxScores,
     maxDrafts: settings.agentMaxDrafts,
-    searchSummary,
-    filters: searchFilters([...scored, ...belowMinimum], searches.map((search) => search.id)),
     setupProblem,
     setupSection: setupProblem ? sectionOf(setupProblem) : null,
-    limitReached: runsInPastDay(settings.agentRuns, now).length >= AGENT_MAX_RUNS_PER_DAY,
+    limitReached: eligible > now,
     lastRun: last ? { at: formatDateTime(new Date(last.at), timeZone, now), message: last.message } : null,
-    nextRun: settings.agentEnabled ? formatDateTime(nextAgentRun(now, settings.agentHour, timeZone, settings.agentRuns), timeZone, now) : null,
+    nextRun: settings.agentEnabled ? formatDateTime(nextAgentRun(now, settings.agentHour, timeZone, settings.agentRuns, requests), timeZone, now) : null,
     runJobId: runJobs[0]?.id ?? null,
     drafts,
-    scored,
-    belowMinimum,
+    scored: waiting.filter((candidate) => candidate.score >= settings.agentMinScore).map(view),
+    belowMinimum: waiting.filter((candidate) => candidate.score < settings.agentMinScore).map(view),
   };
 }

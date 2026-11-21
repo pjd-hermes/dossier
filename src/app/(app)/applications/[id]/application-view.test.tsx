@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { toast } from "@/components/toast";
 import { copyText } from "@/lib/copy-text";
 import { demoLetterUnits, demoProfile, demoResumeUnits } from "@/lib/demo-profile";
+import { DEFAULT_SECTION_LAYOUT } from "@/lib/resume-sections";
 import { BUILT_IN_THEMES } from "@/lib/themes";
 
 import { retry } from "@/lib/jobs/actions";
@@ -27,6 +28,8 @@ import {
   setFollowThemeLayout,
   setShowPhoto,
   startRegenerating,
+  startScoringResume,
+  startWritingDocument,
   startWritingEmail,
   undoEmailRewrite,
   undoMessage,
@@ -54,6 +57,8 @@ vi.mock("./actions", () => ({
   loadVersion: vi.fn(),
   restoreVersion: vi.fn(async () => ({ ok: true, data: null, toast: "Restored the resume as it was then." })),
   startWritingEmail: vi.fn(async () => ({ ok: true, data: "email-1" })),
+  startWritingDocument: vi.fn(async () => ({ ok: true, data: "document-1" })),
+  startScoringResume: vi.fn(async () => ({ ok: true, data: "score-1" })),
   undoEmailRewrite: vi.fn(async () => ({ ok: true, data: null })),
 }));
 vi.mock("@/lib/copy-text", () => ({ copyText: vi.fn(async () => true) }));
@@ -109,6 +114,11 @@ const props: ApplicationViewProps = {
   resume: { units: demoResumeUnits(), theme: theme("editorial") },
   letter: { units: demoLetterUnits(), theme: theme("editorial") },
   themes: [...BUILT_IN_THEMES, { ...theme("modern"), id: "mine", name: "Mine", builtIn: false }],
+  sections: DEFAULT_SECTION_LAYOUT,
+  ownSections: false,
+  sent: false,
+  canUpdate: false,
+  baseSections: [],
   baseThemeId: "modern",
   email: null,
   writingEmail: null,
@@ -272,10 +282,28 @@ describe("the document tabs (E8-2)", () => {
     expect(screen.getByText(/^Cover letter · about \d+0 words$/)).toBeInTheDocument();
   });
 
-  it("says so when a document is missing", () => {
+  it("scores the tailored resume on request, and shows the score with its reasons (#370)", async () => {
+    const user = userEvent.setup();
+    const view = render(<ApplicationView {...props} />);
+    await user.click(screen.getByRole("button", { name: "Score" }));
+    expect(startScoringResume).toHaveBeenCalledWith({ id: props.application.id });
+    expect(screen.getByRole("button", { name: "Scoring…" })).toBeDisabled();
+    view.unmount();
+    const fit = { score: 82, reasons: ["Payments, as the posting asks"], redFlags: ["No Dutch"], scoredWith: "score-posting@2", scoredAt: "2026-11-08T12:00:00.000Z" };
+    render(<ApplicationView {...props} resumeFit={fit} />);
+    expect(screen.getByRole("img", { name: "Score 82 of 100" })).toBeInTheDocument();
+    expect(screen.getByText("Good fit")).toBeInTheDocument();
+    expect(screen.getByText("Payments, as the posting asks Watch out: No Dutch")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Score again" })).toBeInTheDocument();
+  });
+
+  it("says so when a document is missing, and writes it on request (#367)", async () => {
+    const user = userEvent.setup();
     render(<ApplicationView {...props} resume={null} score={null} />);
-    expect(screen.getByText("This application has no tailored resume.")).toBeInTheDocument();
+    expect(screen.getByText("This application was created without a tailored resume.")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Job posting" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Write the tailored resume" }));
+    expect(startWritingDocument).toHaveBeenCalledWith({ id: props.application.id, kind: "RESUME" });
   });
 });
 
@@ -309,6 +337,12 @@ describe("editing a unit (E8-3)", () => {
     const publication = screen.getByRole("group", { name: /^Publication “Doe, J\./ });
     expect(within(publication).getAllByRole("button").map((button) => button.textContent)).toEqual(["Edit", "Leave out"]);
     expect(within(publication).getByText("Doe, J.").tagName).toBe("STRONG");
+  });
+
+  it("keeps a certification as written: Edit and Leave out, no Regenerate or Ask AI (#293)", () => {
+    render(<ApplicationView {...props} />);
+    const certification = screen.getByRole("group", { name: /^Certification “Certified Accessibility Specialist”/ });
+    expect(within(certification).getAllByRole("button").map((button) => button.textContent)).toEqual(["Edit", "Leave out"]);
   });
 
   it("leaves nothing out of the cover letter", () => {
@@ -829,7 +863,7 @@ describe("one-page trimming on the Resume tab (E10-10)", () => {
     expect(note).toHaveTextContent("Left out to fit the page limit:Studio Brik rolePut back1 bullet from the Fieldnote rolePut back");
     await user.click(within(note).getByRole("button", { name: "Put back 1 bullet from the Fieldnote role" }));
     expect(putBackTrimmed).toHaveBeenCalledWith({ id: "app-1", index: 1 });
-    expect(toast).toHaveBeenLastCalledWith("Put back. The resume may run over its page limit now.");
+    expect(toast).toHaveBeenLastCalledWith("Put back.");
   });
 
   it("lists parts left out by hand with them, and says which the page limit left out (#217)", async () => {

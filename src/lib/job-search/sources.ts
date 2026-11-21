@@ -6,16 +6,12 @@ export type JobKeyState = "none" | "set" | "unreadable" | "env";
 /** What the Job search section starts from (E14-4). */
 export type JobSearchSettingsView = {
   source: JobSource | "OFF";
-  /** The providers that are on. */
-  sourcesOn: JobSource[];
   jsearch: { host: JSearchHost; keyState: JobKeyState };
   adzuna: { appId: string; keyState: JobKeyState };
   /** Whether this server offers the Bundesagentur für Arbeit, and when its note was accepted (#223). */
   arbeitsagentur: { offered: boolean; acceptedAt: string | null };
   /** The FreeHire it searches: "freehire.me", or a self-hosted one's host (DOSSIER_FREEHIRE_URL). */
   freehire: { host: string };
-  /** Requests Dossier sent to each provider in the past 30 days. */
-  usage: Partial<Record<JobSource, number>>;
 };
 
 /** Where to get a JSearch key, by where it's from. */
@@ -53,7 +49,7 @@ export const SOURCE_INFO: Record<JobSource, SourceInfo> = {
   JSEARCH: {
     name: "JSearch",
     description: "Postings from LinkedIn, Indeed, Glassdoor and company sites, through Google for Jobs.",
-    tag: "Most countries · free key with 200 searches a month",
+    tag: "Most countries · free plan with a few searches a month",
     keyUrl: "https://www.openwebninja.com/api/jsearch",
     quotaPeriod: "this month",
     attribution: null,
@@ -64,7 +60,7 @@ export const SOURCE_INFO: Record<JobSource, SourceInfo> = {
   ADZUNA: {
     name: "Adzuna",
     description: "Adzuna's own job index in 19 countries. It only shares the start of each posting.",
-    tag: "19 countries · free key, about 250 searches a day",
+    tag: "19 countries · free key, its limits shown in your account",
     keyUrl: "https://developer.adzuna.com/signup",
     quotaPeriod: "today",
     attribution: "Jobs by Adzuna",

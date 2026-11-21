@@ -29,12 +29,8 @@ export function agentDedupeKey(posting: Pick<FoundPosting, "source" | "externalI
   return createHash("sha256").update(basis).digest("hex");
 }
 
-/** A posting as a new candidate, with its score and the saved search that found it. */
-export function candidateData(
-  posting: FoundPosting,
-  score: { score: number; reasons: string[]; redFlags: string[] },
-  search: { id: string; name: string },
-): Prisma.AgentCandidateCreateInput {
+/** A posting as a new candidate, with its score. */
+export function candidateData(posting: FoundPosting, score: { score: number; reasons: string[]; redFlags: string[] }): Prisma.AgentCandidateCreateInput {
   return {
     source: posting.source,
     externalId: posting.externalId,
@@ -52,8 +48,6 @@ export function candidateData(
     reasons: score.reasons,
     redFlags: score.redFlags,
     dedupeKey: agentDedupeKey(posting),
-    searchId: search.id,
-    searchName: search.name,
   };
 }
 

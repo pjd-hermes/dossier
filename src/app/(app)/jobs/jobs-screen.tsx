@@ -8,7 +8,6 @@ import { ArbeitsagenturNote } from "@/components/arbeitsagentur-note";
 import { PageHeader } from "@/components/page-header";
 import { toast, toastResult } from "@/components/toast";
 import { Button, buttonClassName } from "@/components/ui/button";
-import { SegmentedControl } from "@/components/ui/segmented-control";
 import { cn } from "@/lib/cn";
 import type { Country } from "@/lib/job-search/countries";
 import {
@@ -24,7 +23,6 @@ import {
   type StoredSearch,
 } from "@/lib/job-search/search";
 import { SOURCE_INFO } from "@/lib/job-search/sources";
-import { MONTHLY_QUOTA, SHOWN_DAYS } from "@/lib/job-search/usage";
 
 import { acceptArbeitsagenturNote, runJobSearch } from "./actions";
 import { PastSearches } from "./past-searches";
@@ -32,13 +30,9 @@ import { PostingResults } from "./posting-results";
 import { RemoteOnlyField, SearchFields, uncoveredCountry } from "./search-fields";
 
 export type JobsScreenProps = {
-  /** The provider Find jobs searches; null while none is on. */
+  /** The source chosen in Settings; null while job search is off. */
   source: JobSource | null;
-  /** The providers that are on in Settings; the picker shows when there are two or more. */
-  sources?: readonly JobSource[];
-  /** Requests sent to JSearch in the past 30 days, for the hint under the picker. */
-  jsearchUsed?: number;
-  /** The Bundesagentur für Arbeit's note isn't accepted yet, so it isn't searched until then (#223); shown while it's the picked provider. */
+  /** The Bundesagentur für Arbeit is chosen, but its note isn't accepted yet: it isn't searched until then (#223). */
   arbeitsagenturNote?: boolean;
   /** Score opens a Claude chat, which scores through the connector (#221). */
   scoreInClaude?: boolean;
@@ -66,9 +60,7 @@ const SETTINGS_HREF = "/settings?section=jobs";
 
 /** Find jobs (E14-6, E14-7, E14-10): the search form and a kept search's postings, past searches, or the postings kept from them. */
 export function JobsScreen({
-  source: initialSource,
-  sources = initialSource ? [initialSource] : [],
-  jsearchUsed = 0,
+  source,
   arbeitsagenturNote = false,
   scoreInClaude = false,
   countries,
@@ -83,14 +75,6 @@ export function JobsScreen({
 }: JobsScreenProps) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  // The provider picked here; the server's pick again when it changes.
-  const [picked, setPicked] = useState(initialSource);
-  const [seen, setSeen] = useState(initialSource);
-  if (initialSource !== seen) {
-    setSeen(initialSource);
-    setPicked(initialSource);
-  }
-  const source = picked && sources.includes(picked) ? picked : initialSource;
   // A search that didn't work, with what was asked, for Try again.
   const [failed, setFailed] = useState<{ problem: Problem; query: SearchQuery } | null>(null);
   const header = (
@@ -133,7 +117,7 @@ export function JobsScreen({
   // Each search is kept and gets its own history entry, so Back returns to it without asking the source again.
   const run = (next: SearchQuery) =>
     startTransition(async () => {
-      const result = await runJobSearch({ query: next, source: sources.length > 1 ? (source ?? undefined) : undefined });
+      const result = await runJobSearch({ query: next });
       if (!result.ok) return void toast(result.error);
       if (!result.data.ok) return void setFailed({ problem: result.data, query: next });
       setFailed(null);
@@ -152,8 +136,7 @@ export function JobsScreen({
   return (
     <>
       {header}
-      {arbeitsagenturNote && source === "ARBEITSAGENTUR" && <ArbeitsagenturNote accepted={false} onAccept={acceptArbeitsagentur} className="mx-10 mb-5 max-w-[760px]" />}
-      {sources.length > 1 && <SourcePicker sources={sources} value={source} used={jsearchUsed} onChange={setPicked} />}
+      {arbeitsagenturNote && <ArbeitsagenturNote accepted={false} onAccept={acceptArbeitsagentur} className="mx-10 mb-5 max-w-[760px]" />}
       <SearchForm source={source} countries={countries} query={query} pending={pending} onSearch={run} />
       {/* Announces each new set of results; the list itself is replaced. */}
       <p role="status" className="sr-only">
@@ -181,26 +164,6 @@ export function JobsScreen({
         )}
       </div>
     </>
-  );
-}
-
-/** Which of the providers that are on to search, with JSearch's use of its monthly quota. */
-function SourcePicker({ sources, value, used, onChange }: { sources: readonly JobSource[]; value: JobSource; used: number; onChange: (source: JobSource) => void }) {
-  return (
-    <div className="mx-10 mb-4 flex flex-wrap items-center gap-x-4 gap-y-2">
-      <SegmentedControl
-        aria-label="Search on"
-        size="sm"
-        value={value}
-        onValueChange={onChange}
-        options={sources.map((name) => ({ value: name, label: SOURCE_INFO[name].name }))}
-      />
-      {value === "JSEARCH" && (
-        <p className="text-meta text-muted">
-          JSearch: {used} of {MONTHLY_QUOTA.JSEARCH} used in the past {SHOWN_DAYS} days.
-        </p>
-      )}
-    </div>
   );
 }
 
@@ -248,10 +211,10 @@ function SearchForm({
       aria-label="Search postings"
       noValidate
       onSubmit={submit}
-      className="mx-10 mb-7 grid grid-cols-1 items-start gap-x-4 gap-y-4 rounded-panel border border-line-card bg-card p-6 sm:grid-cols-2 lg:grid-cols-[2fr_1.5fr_1.3fr_1fr_1fr]"
+      className="mx-10 mb-7 grid grid-cols-1 items-start gap-x-4 gap-y-4 rounded-panel border border-line-card bg-card p-6 sm:grid-cols-2 lg:grid-cols-[2fr_1.5fr_1.3fr_1fr_1fr_1fr]"
     >
       <SearchFields value={form} onChange={set} source={source} countries={countries} errors={errors} />
-      <div className="flex flex-wrap items-center justify-between gap-4 sm:col-span-2 lg:col-span-5">
+      <div className="flex flex-wrap items-center justify-between gap-4 sm:col-span-2 lg:col-span-6">
         <RemoteOnlyField value={form} onChange={set} source={source} />
         <Button type="submit" aria-disabled={pending || undefined}>
           {pending ? "Searching…" : "Search"}

@@ -12,7 +12,7 @@ import { unitsSchema } from "@/lib/application-data";
 import { fitBand } from "@/lib/fit";
 import { countryCodeFor, countryName } from "@/lib/job-search/countries";
 import { fullText } from "@/lib/job-search/find";
-import { DEFAULT_RADIUS_KM, foundPostingSchema, POSTED_WITHIN, postingText, RADII_KM, type FoundPosting, type JobSource, type PostedWithin, type SearchQuery, type ShownPosting } from "@/lib/job-search/search";
+import { DEFAULT_RADIUS_KM, foundPostingSchema, POSTED_WITHIN, postingText, RADII_KM, type FoundPosting, type PostedWithin, type SearchQuery, type ShownPosting } from "@/lib/job-search/search";
 import { getJob, startJob } from "@/lib/jobs/runner";
 import { withoutPrivateParts } from "@/lib/letter-frame";
 import { fetchPosting } from "@/lib/posting-fetch";
@@ -21,6 +21,8 @@ import { loadSearch, runSearch, showMoreFor } from "@/lib/posting-searches";
 import { foundFromPosting, storePosting } from "@/lib/postings";
 import { prisma } from "@/lib/prisma";
 import { loadProfile } from "@/lib/profile-data";
+import { withoutSectionsOff } from "@/lib/resume-sections";
+import { loadSettings } from "@/lib/settings-data";
 import { statusInfo } from "@/lib/status";
 import { applyStatusChange } from "@/lib/status-changes";
 import { appVersion } from "@/lib/version";
@@ -114,12 +116,13 @@ async function resolvePosting(source: PostingSource): Promise<ResolvedPosting | 
       place: found.place,
     };
   }
+  // Pasted text is used as it is, with its link kept: a page Dossier can't read, such as one behind a sign-in, mustn't fail it.
+  if (source.posting_text?.trim()) return { text: source.posting_text.trim(), url: source.posting_url ?? "", postingId: null };
   if (source.posting_url) {
     const fetched = await fetchPosting(source.posting_url);
     if (!fetched.ok) return { error: `${fetched.error} Paste the posting's text as posting_text instead.` };
     return { text: fetched.text, url: fetched.url, postingId: null };
   }
-  if (source.posting_text?.trim()) return { text: source.posting_text.trim(), url: "", postingId: null };
   return { error: "Give posting_id, paste_id, search_id and number, posting_url, or posting_text." };
 }
 
@@ -145,10 +148,13 @@ export function createDossierServer(origin: string): McpServer {
     {
       title: "Read the profile",
       description:
-        "The user's profile in Dossier: headline, summary, facts about them, skills, languages, experience, projects, education and publications, with the ids save_application uses. Contact details and links are left out.",
+        "The user's profile in Dossier: headline, summary, facts about them, skills, languages, experience, projects, education, certifications, publications and sections they made, with the ids save_application uses. Contact details and links are left out.",
       annotations: { readOnlyHint: true },
     },
-    async () => text({ ...JSON.parse(profileForPrompt(await loadProfile())), link: linkTo("/profile") }),
+    async () => {
+      const [profile, settings] = await Promise.all([loadProfile(), loadSettings()]);
+      return text({ ...JSON.parse(profileForPrompt(withoutSectionsOff(profile, settings.resumeSections))), link: linkTo("/profile") });
+    },
   );
 
   server.registerTool(
@@ -156,7 +162,7 @@ export function createDossierServer(origin: string): McpServer {
     {
       title: "Search for jobs",
       description:
-        "Searches a job provider that's on in Dossier's settings (source picks one) and keeps the search in Find jobs → Past searches. Each search uses one search from the user's plan with that source. " +
+        "Searches the job source set up in Dossier's settings and keeps the search in Find jobs → Past searches. Each search uses one search from the user's plan with that source. " +
         "Returns a search_id and numbered postings; pass both to get_posting, save_job_scores or save_application, or the search_id to more_jobs.",
       inputSchema: z.object({
         keywords: z.string().trim().min(1).max(200).describe("Job title, skill or company, e.g. 'product designer'"),
@@ -165,10 +171,6 @@ export function createDossierServer(origin: string): McpServer {
         remote_only: z.boolean().optional().describe("Only remote postings."),
         radius_km: z.literal(RADII_KM).optional(),
         posted_within: z.enum(POSTED).optional().describe("any, day, 3days, week or month. Defaults to month."),
-        source: z
-          .enum(["jsearch", "adzuna", "freehire", "arbeitsagentur"])
-          .optional()
-          .describe("Which provider to search; one that's on in Settings → Job search. Defaults to the one Find jobs uses."),
       }),
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
@@ -185,7 +187,7 @@ export function createDossierServer(origin: string): McpServer {
         remoteOnly,
         postedWithin: input.posted_within ?? "month",
       };
-      const ran = await runSearch(query, input.source?.toUpperCase() as JobSource | undefined);
+      const ran = await runSearch(query);
       if (!ran.ok) return failure(ran.message);
       const search = await loadSearch(ran.id);
       if (!search) return failure("The search ran, but couldn't be read back. Try again.");

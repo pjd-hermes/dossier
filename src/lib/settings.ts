@@ -1,10 +1,13 @@
 import { z } from "zod";
 
 import { AiProvider, Creativity, DateFormat, PaperSize, Tone } from "@/generated/prisma/enums";
-import { EMPTY_QUERY, JOB_SOURCES, JSEARCH_HOSTS, searchQuerySchema } from "@/lib/job-search/search";
-import { agentSearchSchema, DEFAULT_SOURCE_CAPS, MAX_AGENT_SEARCHES, sourceCapsSchema } from "@/lib/agent/search-schema";
+import { announcementFeedSchema } from "@/lib/announcements/contract";
+import { JOB_SOURCES, JSEARCH_HOSTS } from "@/lib/job-search/search";
+import { DEFAULT_SECTION_LAYOUT, sectionLayoutSchema } from "@/lib/resume-sections";
+import { setupGuideSchema } from "@/lib/setup-guide";
 import { SCORERS } from "@/lib/scoring/scorers";
 import { startupsRefreshSchema } from "@/lib/startups/types";
+import { AGENT_MAX_SOURCE_REQUESTS_PER_DAY } from "@/lib/agent/limits";
 
 /** Date styles for documents (SET-6), labelled with an example as in the prototype. */
 export const DATE_FORMATS: readonly { value: DateFormat; label: string }[] = [
@@ -45,22 +48,10 @@ export const isJobRetention = (hours: number) => JOB_RETENTION_OPTIONS.some((opt
 export const jobRetentionLabel = (hours: number) =>
   JOB_RETENTION_OPTIONS.find((option) => option.hours === hours)?.label ?? `${hours} hours`;
 
-const pageLimit = z.enum(["1", "2", "none"]);
-export type PageLimit = z.infer<typeof pageLimit>;
-
-/**
- * "Resume length" (SET-9): how many pages a tailored resume may run to. One
- * that runs over is trimmed when its application is created (E10-10).
- */
-export const PAGE_LIMITS: readonly { value: PageLimit; label: string; pages: number | null }[] = [
-  { value: "1", label: "One page", pages: 1 },
-  { value: "2", label: "Up to two pages", pages: 2 },
-  { value: "none", label: "No limit", pages: null },
-];
-/** The most pages a resume may have, or null for no limit. */
-export const maxPages = (limit: PageLimit): number | null => PAGE_LIMITS.find((option) => option.value === limit)?.pages ?? null;
-/** "one page", "two pages" */
-export const pagesInWords = (pages: number) => (pages === 1 ? "one page" : pages === 2 ? "two pages" : `${pages} pages`);
+/** Which documents New application writes (#367): many job sites ask for only one. */
+export const DOCUMENTS_TO_WRITE = ["both", "resume", "letter"] as const;
+export type DocumentsToWrite = (typeof DOCUMENTS_TO_WRITE)[number];
+export const DOCUMENTS_TO_WRITE_LABELS: Record<DocumentsToWrite, string> = { both: "Resume and cover letter", resume: "Resume only", letter: "Cover letter only" };
 
 // ─── Stored settings ─────────────────────────────────────────────────────────
 // Settings are stored in the Setting table, one text row per key: enums by
@@ -89,19 +80,30 @@ const stringList = json(z.array(z.string()));
 
 /**
  * One run of the job agent (E16), kept here rather than as its Job, which
- * the task-data sweep deletes: the daily limit counts these.
+ * the task-data sweep deletes: the source-request quota counts these.
  */
+export const agentSearchRunSchema = z.object({
+  searchId: z.string(),
+  searchName: z.string(),
+  found: z.number().int().min(0),
+  fresh: z.number().int().min(0),
+  error: z.string().nullable(),
+});
+export type AgentSearchRun = z.infer<typeof agentSearchRunSchema>;
 export const agentRunSchema = z.object({
   at: z.iso.datetime(),
   manual: z.boolean(),
   /** What the run ended with, for the Agent screen; null while it runs. */
   message: z.string().nullable(),
-  /** The provider requests the run planned, before any was sent: they count against each provider's daily cap. */
-  requests: z.array(z.object({ source: z.enum(JOB_SOURCES), searchId: z.string() })).default([]),
+  /** Slots reserved together before dispatch. Legacy runs consumed one slot. */
+  sourceRequests: z.number().int().min(1).max(AGENT_MAX_SOURCE_REQUESTS_PER_DAY).optional(),
+  /** Each reserved slot's timestamp, advanced immediately before dispatch. */
+  sourceRequestAts: z.array(z.iso.datetime()).min(1).max(AGENT_MAX_SOURCE_REQUESTS_PER_DAY).optional(),
+  searches: z.array(agentSearchRunSchema).optional(),
 });
 export type AgentRun = z.infer<typeof agentRunSchema>;
 /** How many runs are kept: more than a day's worth, for the limit and the screen. */
-export const AGENT_RUNS_KEPT = 30;
+export const AGENT_RUNS_KEPT = 10;
 
 export const settingsSchema = z.object({
   // AI provider (SET-1). Null means "not set in the app": fall back to the
@@ -127,8 +129,8 @@ export const settingsSchema = z.object({
   customLanguages: stringList.catch([]),
   fileNamePattern: z.string().catch("{name} – {company} – {doc}"),
   includeRefs: flag(false),
-  /** Up to two pages unless chosen (decided 22 October 2026: resumes aren't forced to one page). */
-  pageLimit: pageLimit.catch("2"),
+  /** What New application writes unless chosen there (#367). */
+  documentsToWrite: z.enum(DOCUMENTS_TO_WRITE).catch("both"),
   nightlyBackup: flag(true),
   /** Finished background jobs are deleted after this many hours (JOB_RETENTION_OPTIONS). */
   jobRetentionHours: z.coerce.number().refine(isJobRetention).catch(DEFAULT_JOB_RETENTION_HOURS),
@@ -143,19 +145,23 @@ export const settingsSchema = z.object({
   /** Days without news before "Worth a look" suggests a follow-up (E9-9). */
   quietDays: z.coerce.number().int().min(1).max(60).catch(7),
   /** Experience, projects and education: newest first by date, or the order set by hand (E4-9). */
+  /** Skills (public issue 62): the most relevant first on tailored resumes, until the user sets their own order, which is then kept. */
+  skillOrder: z.enum(["relevance", "manual"]).catch("relevance"),
   experienceOrder: z.enum(["date", "manual"]).catch("date"),
   projectOrder: z.enum(["date", "manual"]).catch("date"),
   educationOrder: z.enum(["date", "manual"]).catch("date"),
+  /** Where the setup guide was left (E21); null until it's first opened. */
+  setupGuide: json(setupGuideSchema).nullable().catch(null),
+  /** The base resume's sections: their order and which are off (#297). */
+  resumeSections: json(sectionLayoutSchema).catch(DEFAULT_SECTION_LAYOUT),
+  /** "Fit to one page" on the base resume (public issue 69): spacing, then type, tightened until it fits. */
+  fitBaseResume: flag(false),
   /** Why the last nightly backup failed; null once one works again (E10-7). */
   backupProblem: z.string().nullable().catch(null),
   // Job search (E14-4). Null means "not set in the app": DOSSIER_JOBS_SOURCE
   // decides. "OFF" is a choice. Each source keeps its own key, encrypted
   // like the AI key, so switching back and forth loses nothing.
   jobSource: z.enum([...JOB_SOURCES, "OFF"]).nullable().catch(null),
-  /** The providers searched together (the agent, saved searches); null means just the one `jobSource` names. */
-  jobSourcesOn: json(z.array(z.enum(JOB_SOURCES))).nullable().catch(null),
-  /** Requests Dossier sent to each provider per day (UTC), kept 31 days. They belong to the install: exports leave them out (INSTALL_SETTINGS). */
-  jobSourceUsage: json(z.partialRecord(z.enum(JOB_SOURCES), z.record(z.string(), z.number().int().min(0)))).catch({}),
   jsearchKeyEnc: z.string().nullable().catch(null),
   /** Where the JSearch key is from: OpenWeb Ninja, or the RapidAPI marketplace. */
   jsearchHost: z.enum(JSEARCH_HOSTS).catch("openwebninja"),
@@ -168,15 +174,9 @@ export const settingsSchema = z.object({
   // AI model. Jev's key is encrypted like the others, under its own key.
   scorer: z.enum(SCORERS).nullable().catch(null),
   typesafeKeyEnc: z.string().nullable().catch(null),
-  // Job agent (E16): the saved searches, run once a day. Off until it's turned on.
-  // It asks the providers that are on in Settings → Job search, with their keys.
+  // Job agent (E16): recurring searches, run once a day. Off until turned on.
+  // It asks the source in Settings → Job search, with its key.
   agentEnabled: flag(false),
-  /** The search it runs, as Find jobs asks it; it needs keywords and a country to run. */
-  agentQuery: json(searchQuerySchema).catch(EMPTY_QUERY),
-  /** The saved searches, up to five; null until saved once, when `agentQuery` stands in (searchesOf). */
-  agentSearches: json(z.array(agentSearchSchema).max(MAX_AGENT_SEARCHES)).nullable().catch(null),
-  /** The most searches a day each provider is sent; one not listed has no cap. */
-  agentSourceCaps: json(sourceCapsSchema).catch(DEFAULT_SOURCE_CAPS),
   /** The hour of the day it runs, in the user's time zone. */
   agentHour: z.coerce.number().int().min(0).max(23).catch(7),
   /** Postings scored below this stay out of the queue. */
@@ -202,6 +202,11 @@ export const settingsSchema = z.object({
   latestVersionUrl: z.string().nullable().catch(null),
   updateCheckDay: z.string().nullable().catch(null),
   updateDismissed: z.string().nullable().catch(null),
+  // The backend's notices (announcements/check.ts): its last answer, and the
+  // ones dismissed here. They belong to the install, not its data, so exports
+  // leave them out (INSTALL_SETTINGS).
+  announcementFeed: json(announcementFeedSchema).nullable().catch(null),
+  announcementsDismissed: stringList.catch([]),
   // Gmail and Calendar (E15). Off until the Google account is connected.
   // The OAuth client, entered in Settings → Google. Null means "not set in the
   // app": DOSSIER_GOOGLE_CLIENT_ID and DOSSIER_GOOGLE_CLIENT_SECRET decide.
@@ -257,10 +262,8 @@ export type SettingsData = z.output<typeof settingsSchema>;
 
 /** The settings from Setting rows; keys it doesn't know are ignored. */
 export function settingsFromRows(rows: readonly { key: string; value: string }[]): SettingsData {
+  // Old keys, such as Resume length's pageLimit (removed with the trimmer, #234), are left out here.
   const values: Record<string, string> = Object.fromEntries(rows.map((row) => [row.key, row.value]));
-  // Up to 1.7, the limit was "Keep resumes to one page" (onePage), and off meant no limit. Databases and export files may still have it.
-  if (values.pageLimit === undefined && values.onePage === "false") values.pageLimit = "none";
-  if (values.pageLimit === undefined && values.onePage === "true") values.pageLimit = "1";
   return settingsSchema.parse(values);
 }
 

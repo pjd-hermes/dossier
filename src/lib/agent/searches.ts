@@ -1,27 +1,68 @@
-import type { JobSource, SearchQuery } from "@/lib/job-search/search";
-import type { SettingsData } from "@/lib/settings";
+import "server-only";
 
-import type { AgentSearch, SourceCap, SourceCaps } from "./search-schema";
+import type { Prisma, PrismaClient } from "@/generated/prisma/client";
+import { ActionError } from "@/lib/action";
+import { searchQuerySchema } from "@/lib/job-search/search";
+import { lockForTransaction } from "@/lib/db-lock";
+import { prisma } from "@/lib/prisma";
 
-/**
- * The saved searches. Before there were several, the agent had one search,
- * `agentQuery`: while no list is saved, that one stands in for it.
- */
-export function searchesOf(settings: Pick<SettingsData, "agentSearches" | "agentQuery" | "agentEnabled">): AgentSearch[] {
-  if (settings.agentSearches !== null) return settings.agentSearches;
-  const { agentQuery } = settings;
-  if (!agentQuery.keywords) return [];
-  return [{ ...agentQuery, id: "legacy", name: agentQuery.keywords.slice(0, 80), enabled: true }];
+import { agentSearchInputSchema, MAX_AGENT_SEARCHES, type AgentSearchInput, type SavedAgentSearch } from "./search";
+
+/** Serialize all search writes, including imports, without introducing a lock table. */
+export async function lockAgentSearches(tx: Prisma.TransactionClient): Promise<void> {
+  await lockForTransaction(tx, 621746001);
 }
 
-/** A search needs keywords and a country to run. */
-export const searchReady = (search: SearchQuery) => Boolean(search.keywords.trim() && search.country);
+export async function listAgentSearches(db: PrismaClient = prisma): Promise<SavedAgentSearch[]> {
+  const rows = await db.agentSearch.findMany({ orderBy: [{ sort: "asc" }, { createdAt: "asc" }, { id: "asc" }] });
+  return rows.map((row) => ({ ...row, query: searchQuerySchema.parse(row.query) }));
+}
 
-/** The searches a run makes, in list order: not paused, and ready. */
-export const runnableSearches = (searches: readonly AgentSearch[]): AgentSearch[] =>
-  searches.filter((search) => search.enabled && searchReady(search));
+/** Create, or update by stable id. Disabled searches count toward the cap too. */
+export async function saveAgentSearch(input: AgentSearchInput, id?: string, db: PrismaClient = prisma): Promise<SavedAgentSearch> {
+  const data = agentSearchInputSchema.parse(input);
+  return db.$transaction(async (tx) => {
+    await lockAgentSearches(tx);
+    if (id && !await tx.agentSearch.findUnique({ where: { id }, select: { id: true } })) throw new ActionError("That Agent search no longer exists.");
+    if (!id && await tx.agentSearch.count() >= MAX_AGENT_SEARCHES) throw new ActionError("Keep at most three Agent searches.");
+    const row = id
+      ? await tx.agentSearch.update({ where: { id }, data })
+      : await tx.agentSearch.create({ data });
+    return { ...row, query: searchQuerySchema.parse(row.query) };
+  });
+}
 
-/** The most searches a day a provider is sent. The Bundesagentur für Arbeit is never searched by the agent. */
-export const capOf = (caps: SourceCaps, source: JobSource): SourceCap => (source === "ARBEITSAGENTUR" ? 0 : (caps[source] ?? "all"));
+/** A stale toggle must never replace another tab's name, query or order. */
+export async function setAgentSearchEnabled(id: string, enabled: boolean, db: PrismaClient = prisma): Promise<SavedAgentSearch> {
+  return db.$transaction(async (tx) => {
+    await lockAgentSearches(tx);
+    const current = await tx.agentSearch.findUnique({ where: { id } });
+    if (!current) throw new ActionError("That Agent search no longer exists.");
+    const query = searchQuerySchema.parse(current.query);
+    if (enabled && !query.country) throw new ActionError(`Choose a country for “${current.name}”.`);
+    const row = await tx.agentSearch.update({ where: { id }, data: { enabled } });
+    return { ...row, query };
+  });
+}
 
-export const newSearchId = () => crypto.randomUUID().slice(0, 12);
+/** The FK unlinks attribution but keeps its historical name. Candidates remain. */
+export async function deleteAgentSearch(id: string, db: PrismaClient = prisma): Promise<void> {
+  await db.$transaction(async (tx) => {
+    await lockAgentSearches(tx);
+    await tx.agentSearch.deleteMany({ where: { id } });
+  });
+}
+
+/** Move against the current order under the same lock as create/delete/import. */
+export async function moveAgentSearch(id: string, direction: "up" | "down", db: PrismaClient = prisma): Promise<void> {
+  await db.$transaction(async (tx) => {
+    await lockAgentSearches(tx);
+    const rows = await tx.agentSearch.findMany({ orderBy: [{ sort: "asc" }, { createdAt: "asc" }, { id: "asc" }] });
+    const index = rows.findIndex((row) => row.id === id);
+    if (index < 0) throw new ActionError("That Agent search no longer exists.");
+    const target = index + (direction === "up" ? -1 : 1);
+    if (target < 0 || target >= rows.length) return;
+    [rows[index], rows[target]] = [rows[target], rows[index]];
+    for (const [sort, row] of rows.entries()) await tx.agentSearch.update({ where: { id: row.id }, data: { sort } });
+  });
+}

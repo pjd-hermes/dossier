@@ -5,13 +5,13 @@ import { logServerError } from "@/lib/log";
 import type { JobSourceAdapter, RequestContext, SourceCredentials } from "./adapter";
 import { cached, remember } from "./cache";
 import { JobSearchError, jobSearchError } from "./errors";
+import { fitsExperience } from "./experience";
 import { adzuna } from "./adzuna";
 import { arbeitsagentur } from "./arbeitsagentur";
 import { freehire } from "./freehire";
 import { jsearch } from "./jsearch";
 import { postingKey, type FoundPosting, type JobSource, type SearchPage, type SearchQuery } from "./search";
 import { sourceCovers } from "./sources";
-import { countRequest } from "./usage-store";
 
 // Searching the chosen job source from the server (E14-1). Results are
 // cached for half an hour; failures come back as JobSearchError with a
@@ -55,8 +55,9 @@ export async function searchPostings<S extends JobSource>(
   const key = `search:${source}:${JSON.stringify(query)}:${next ?? ""}`;
   const hit = cached<SearchPage>(key);
   if (hit) return hit;
-  await countRequest(source);
-  const page = await logged(() => adapter.search(query, credentials, next, context));
+  const found = await logged(() => adapter.search(query, credentials, next, context));
+  // Postings clearly for another level go (public issue 59); ones that don't say stay.
+  const page = { ...found, postings: found.postings.filter((posting) => fitsExperience(posting, query)) };
   remember(key, page);
   return page;
 }
@@ -72,7 +73,6 @@ export async function postingDetails<S extends JobSource>(
   const key = `details:${postingKey(posting)}`;
   const hit = cached<string>(key);
   if (hit) return hit;
-  await countRequest(source);
   const text = await logged(() => adapterFor(source).details(posting, credentials, context));
   if (text) remember(key, text);
   return text;
@@ -80,6 +80,5 @@ export async function postingDetails<S extends JobSource>(
 
 /** "Test connection" in Settings → Job search: throws a JobSearchError when the source or the key doesn't work. */
 export async function testSource<S extends JobSource>(source: S, credentials: SourceCredentials[S], context: RequestContext = {}): Promise<void> {
-  await countRequest(source);
   await logged(() => adapterFor(source).test(credentials, context));
 }

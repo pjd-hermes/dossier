@@ -2,19 +2,20 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 
 import { loadAiConfig, loadAiSettingsView } from "@/lib/ai/config";
-import { searchesOf } from "@/lib/agent/searches";
 import { jobSearchView, loadJobSearchConfig } from "@/lib/job-search/config";
 import { COUNTRIES } from "@/lib/job-search/countries";
-import { agentSources } from "@/lib/job-search/providers-on";
+import { isDesktopApp } from "@/lib/desktop";
+import { loadSearch } from "@/lib/posting-searches";
+import { listAgentSearches } from "@/lib/agent/searches";
 import { providerOption } from "@/lib/ai/provider-options";
 import { lastNightlyBackup } from "@/lib/backup-schedule";
 import { backupsDir } from "@/lib/backups";
 import { mcpUrl } from "@/lib/connector/oauth";
 import { exportFileName } from "@/lib/data-export";
-import { formatShortDate } from "@/lib/dates";
+import { isSqliteUrl } from "@/lib/database";
 import { env } from "@/lib/env";
-import { googleConnection } from "@/lib/google/account";
-import { loadGoogleClientConfig, redirectUri } from "@/lib/google/oauth";
+import { redirectUri } from "@/lib/google/oauth";
+import { googleClientView, googleView, requestOrigin, whenRan } from "@/lib/settings-views";
 import { lastKnownTimeZone, userTimeZone } from "@/lib/time-zone";
 import { appVersion } from "@/lib/version";
 import { prisma } from "@/lib/prisma";
@@ -55,26 +56,26 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
           <AiBehaviour initial={{ creativity: settings.creativity, strict: settings.strict, showDiff: settings.showDiff }} />
         </>
       ) : section === "jobs" ? (
-        <JobSearchSection initial={jobSearchView(await loadJobSearchConfig(), settings.jobSourceUsage)} />
+        <JobSearchSection initial={jobSearchView(await loadJobSearchConfig())} />
       ) : section === "scoring" ? (
         <ScoringSection initial={scoringView(await loadScoringConfig())} />
       ) : section === "agent" ? (
         <AgentSection
           initial={{
             enabled: settings.agentEnabled,
-            searches: searchesOf(settings),
-            caps: settings.agentSourceCaps,
             hour: settings.agentHour,
             minScore: settings.agentMinScore,
             maxScores: settings.agentMaxScores,
             maxDrafts: settings.agentMaxDrafts,
             autoDraft: settings.agentAutoDraft,
           }}
-          sources={agentSources(await loadJobSearchConfig())}
-          runs={settings.agentRuns}
+          searches={await listAgentSearches()}
+          suggestedQuery={(await loadSearch())?.query}
+          source={(await loadJobSearchConfig()).source}
           scoring={await scoringReadiness()}
           countries={COUNTRIES}
           timeZone={await lastKnownTimeZone()}
+          onlyWhileOpen={isDesktopApp()}
         />
       ) : section === "google" ? (
         <>
@@ -84,6 +85,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             client={await googleClientView()}
             browserTimeZone={(await userTimeZone()) ?? null}
             redirectUri={redirectUri(await requestOrigin())}
+            inDesktopApp={isDesktopApp()}
             initial={{
               gmailRead: settings.gmailRead,
               gmailScope: settings.gmailScope,
@@ -104,6 +106,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         <ConnectorSection
           initial={{ on: settings.connectorEnabledAt !== null, redirects: settings.connectorRedirects }}
           address={mcpUrl(env.DOSSIER_PUBLIC_URL ?? (await requestOrigin()))}
+          inDesktopApp={isDesktopApp()}
         />
       ) : section === "data" ? (
         <DataSection
@@ -115,6 +118,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             dir: backupsDir(),
             lastRun: whenRan(await lastNightlyBackup()),
             problem: settings.backupProblem,
+            onlyWhileOpen: isDesktopApp(),
           }}
           jobRetentionHours={settings.jobRetentionHours}
         />
@@ -130,7 +134,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
             customLanguages: settings.customLanguages,
             fileNamePattern: settings.fileNamePattern,
             includeRefs: settings.includeRefs,
-            pageLimit: settings.pageLimit,
+            documentsToWrite: settings.documentsToWrite,
           }}
           preview={await filePreview()}
         />
@@ -151,27 +155,8 @@ async function scoringReadiness() {
   return { scorer: config.scorer, ready: (await scoringProblem(config)) === null };
 }
 
-/** The connection as the Google section shows it: never a token. */
-async function googleView() {
-  const connection = await googleConnection();
-  if (connection.status !== "connected") return connection;
-  const { lastSyncAt, ...rest } = connection;
-  return { ...rest, lastSync: whenRan(lastSyncAt) };
-}
 
-/** The OAuth client as the Google section shows it: the ID, never the secret. */
-async function googleClientView() {
-  const { id, idState, secretState } = await loadGoogleClientConfig();
-  return { id, idState, secretState };
-}
 
-/** The address this page was reached at, for the redirect URI to register. */
-async function requestOrigin(): Promise<string> {
-  const requestHeaders = await headers();
-  const host = requestHeaders.get("x-forwarded-host")?.split(",")[0]?.trim() || requestHeaders.get("host") || "localhost:3000";
-  const protocol = requestHeaders.get("x-forwarded-proto")?.split(",")[0]?.trim() || (host.startsWith("localhost") ? "http" : "https");
-  return `${protocol}://${host}`;
-}
 
 /** The file name preview uses your name and your latest application, or sample values (SET-8). */
 async function filePreview() {
@@ -186,16 +171,6 @@ async function filePreview() {
   };
 }
 
-/** "today at 03:00", "yesterday at 03:00" or "on 25 Sep at 03:00", in the server's time zone. */
-function whenRan(date: Date | null, now = new Date()): string | null {
-  if (!date) return null;
-  const time = date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
-  const day = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
-  const days = Math.round((day(now) - day(date)) / 86_400_000);
-  if (days === 0) return `today at ${time}`;
-  if (days === 1) return `yesterday at ${time}`;
-  return `on ${formatShortDate(date, now)} at ${time}`;
-}
 
 /** "12.4 MB" */
 function formatBytes(bytes: number): string {
@@ -213,16 +188,19 @@ function formatBytes(bytes: number): string {
 async function aboutFacts(): Promise<AboutFacts> {
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host")?.split(",")[0]?.trim() || requestHeaders.get("host") || "Unknown";
+  const sqlite = isSqliteUrl(env.DATABASE_URL);
   const [[database], ai, applications] = await Promise.all([
-    prisma.$queryRaw<{ size: bigint }[]>`SELECT pg_database_size(current_database()) AS size`,
+    sqlite
+      ? prisma.$queryRaw<{ size: bigint }[]>`SELECT page_count * page_size AS size FROM pragma_page_count(), pragma_page_size()`
+      : prisma.$queryRaw<{ size: bigint }[]>`SELECT pg_database_size(current_database()) AS size`,
     loadAiConfig(),
     prisma.application.count({ where: { awaitingReview: false } }),
   ]);
   return [
     { label: "Version", value: appVersion },
     { label: "Server", value: host },
-    { label: "Database", value: `PostgreSQL · ${formatBytes(Number(database.size))}` },
-    { label: "Sign-in", value: "set via DOSSIER_PASSWORD" },
+    { label: "Database", value: `${sqlite ? "SQLite" : "PostgreSQL"} · ${formatBytes(Number(database.size))}` },
+    { label: "Sign-in", value: isDesktopApp() ? "none, on this computer" : "set via DOSSIER_PASSWORD" },
     { label: "AI", value: [providerOption(ai.provider).name, ai.model].filter(Boolean).join(" · ") },
     { label: "Applications", value: String(applications) },
   ];

@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
+import type { UsageEntry } from "@/lib/usage";
+
 import { AiError } from "./errors";
 import { AnthropicProvider, ANTHROPIC_FALLBACK_MODELS } from "./providers/anthropic";
 import { LMSTUDIO_UNREACHABLE, LmStudioProvider } from "./providers/lmstudio";
@@ -8,13 +10,12 @@ import { LocalProvider } from "./providers/local";
 import { MISTRAL_FALLBACK_MODELS, MistralProvider } from "./providers/mistral";
 import { MockProvider } from "./providers/mock";
 import { OllamaProvider } from "./providers/ollama";
-import { OpenCodeGoProvider, openCodeGoRoot, openCodeGoSession } from "./providers/opencode-go";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
 import { hang, json, refused, stubFetch } from "./test-http";
 
 afterEach(() => vi.unstubAllGlobals());
 
-const ask = { system: "Be brief.", messages: [{ role: "user" as const, content: "Hi" }] };
+const ask = { task: "connection-check" as const, system: "Be brief.", messages: [{ role: "user" as const, content: "Hi" }] };
 const Person = z.object({ name: z.string(), years: z.number() });
 
 /** The AiError a promise rejects with. */
@@ -144,6 +145,14 @@ describe("OpenAICompatibleProvider", () => {
     expect(requests[0].body).toMatchObject({ temperature: 0.2, max_tokens: 4096, response_format: { type: "json_schema" } });
   });
 
+  it("asks OpenRouter to skip companies that keep or train on prompts (E21-7)", async () => {
+    const requests = stubFetch(() => openaiChat('{"name":"Jane","years":9}'));
+    for (const url of ["https://openrouter.ai/api/v1", "https://example.com/v1"]) {
+      await new OpenAICompatibleProvider("OPENAI", url, "sk", "openai/gpt-6.1-terra", 60_000).complete({ ...ask, schema: Person });
+    }
+    expect(requests.map((request) => (request.body as Record<string, unknown>).provider)).toEqual([{ data_collection: "deny" }, undefined]);
+  });
+
   it("puts the schema in the prompt for Ollama's cloud, which takes response_format without holding answers to it (#276)", async () => {
     // As Ollama's cloud does: whatever response_format says, the model answers in a shape of its own.
     const requests = stubFetch(({ body }) => {
@@ -224,142 +233,37 @@ describe("OpenAICompatibleProvider", () => {
     expect(requests.map((request) => (request.body as { max_tokens: number }).max_tokens)).toEqual([4096, 4096 + 12_000, 4096 + 12_000]);
   });
 
+  it("leaves room for thinking when the server refuses an answer that didn't fit, as gpt-6-luna does (public PR 51)", async () => {
+    const requests = stubFetch(({ body }) => {
+      const sent = body as { max_tokens?: number; max_completion_tokens: number };
+      if (sent.max_tokens !== undefined) {
+        return json({ error: { message: "Unsupported parameter: 'max_tokens' is not supported with this model. Use 'max_completion_tokens' instead." } }, { status: 400 });
+      }
+      return sent.max_completion_tokens > 16
+        ? openaiChat("OK")
+        : json({ error: { message: "Could not finish the message because max_tokens or model output limit was reached. Please try again with higher max_tokens." } }, { status: 400 });
+    });
+    const provider = new OpenAICompatibleProvider("OPENAI", "https://no-room.example/v1", "sk", "gpt-6-luna", 60_000);
+    await expect(provider.test()).resolves.toMatchObject({ model: "gpt-6-luna" });
+    await provider.test();
+    expect(requests.map(({ body }) => body)).toMatchObject([{ max_tokens: 16 }, { max_completion_tokens: 16 }, { max_completion_tokens: 16 + 12_000 }, { max_completion_tokens: 16 + 12_000 }]);
+  });
+
+  it("says the answer was cut off when it still doesn't fit", async () => {
+    const requests = stubFetch(() =>
+      json({ error: { message: "Could not finish the message because max_tokens or model output limit was reached. Please try again with higher max_tokens." } }, { status: 400 }),
+    );
+    const provider = new OpenAICompatibleProvider("OPENAI", "https://never-room.example/v1", "sk", "gpt-6-luna", 60_000);
+    expect(await failure(provider.complete(ask))).toMatchObject({ kind: "cut-off" });
+    expect(requests.map(({ body }) => (body as { max_tokens: number }).max_tokens)).toEqual([4096, 4096 + 12_000]);
+  });
+
   it("keeps the usual budget for a model whose thinking leaves room for the answer", async () => {
     const requests = stubFetch(() => thinkingChat('{"name":"Jane","years":9}'));
     const provider = new OpenAICompatibleProvider("OPENAI", "https://brief-thinker.example/v1", "sk", "glm-5", 60_000);
     await provider.complete({ ...ask, schema: Person });
     await provider.complete({ ...ask, schema: Person });
     expect(requests.map((request) => (request.body as { max_tokens: number }).max_tokens)).toEqual([4096, 4096]);
-  });
-});
-
-describe("OpenCodeGoProvider", () => {
-  it("chats through Go's OpenAI-compatible endpoint, identifying Dossier and the conversation", async () => {
-    const requests = stubFetch(() => openaiChat("Hello!"));
-    const provider = new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk-test", "glm-5.3-flash", 60_000, "application-1");
-    expect(await provider.complete(ask)).toBe("Hello!");
-    expect(requests[0].url.href).toBe("https://opencode.ai/inference/go/openai/v1/chat/completions");
-    expect(requests[0].headers.get("authorization")).toBe("Bearer oc_sk-test");
-    expect(requests[0].headers.get("user-agent")).toMatch(/^Dossier\//);
-    expect(requests[0].headers.get("x-opencode-session")).toBe("ses_application-1");
-
-    await provider.complete(ask);
-    expect(requests[1].headers.get("x-opencode-session")).toBe("ses_application-1");
-  });
-
-  it("accepts the documented base URL or the OpenAI-compatible one", async () => {
-    expect(openCodeGoRoot("https://opencode.ai/inference/go")).toBe("https://opencode.ai/inference/go");
-    expect(openCodeGoRoot("https://opencode.ai/inference/go/")).toBe("https://opencode.ai/inference/go");
-    expect(openCodeGoRoot("https://opencode.ai/inference/go/openai/v1/")).toBe("https://opencode.ai/inference/go");
-    expect(openCodeGoSession("application-1")).toBe("ses_application-1");
-    expect(openCodeGoSession("ses_application-1")).toBe("ses_application-1");
-    expect(openCodeGoSession()).toMatch(/^ses_/);
-
-    const requests = stubFetch(() => openaiChat("Hello!"));
-    await new OpenCodeGoProvider("https://opencode.ai/inference/go/openai/v1/", "oc_sk", "glm-5.3-flash", 60_000).complete(ask);
-    expect(requests[0].url.href).toBe("https://opencode.ai/inference/go/openai/v1/chat/completions");
-  });
-
-  it("puts the schema in the instructions, since some Go models refuse response_format", async () => {
-    const requests = stubFetch(() => openaiChat('{"name":"Jane","years":9}'));
-    const provider = new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk", "glm-5.3-flash", 60_000);
-    expect(await provider.complete({ ...ask, schema: Person, schemaName: "person" })).toEqual({ name: "Jane", years: 9 });
-    const body = requests[0].body as { response_format?: unknown; messages: { content: string }[] };
-    expect(body.response_format).toBeUndefined();
-    expect(body.messages[0].content).toMatch(/Reply with only a JSON object[\s\S]*"years"/);
-  });
-
-  it("lists the Go catalog from /v1/models without sending the key", async () => {
-    const requests = stubFetch(({ url }) => {
-      expect(url.href).toBe("https://opencode.ai/inference/go/v1/models");
-      return json({ object: "list", data: [{ id: "glm-5.3-flash" }, { id: "deepseek-v4.1-flash" }] });
-    });
-    const provider = new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk-test", null, 60_000);
-    expect(await provider.listModels()).toEqual(["deepseek-v4.1-flash", "glm-5.3-flash"]);
-    expect(requests[0].headers.get("authorization")).toBeNull();
-    expect(requests[0].headers.get("user-agent")).toMatch(/^Dossier\//);
-    expect(requests[0].headers.get("x-opencode-session")).toMatch(/^ses_/);
-  });
-
-  it("keeps only IDs from a model list that has odd entries", async () => {
-    stubFetch(() => json({ object: "list", data: [{ id: "glm-5.3-flash" }, { id: 4 }, {}] }));
-    const provider = new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk-test", null, 60_000);
-    expect(await provider.listModels()).toEqual(["glm-5.3-flash"]);
-  });
-
-  it("reports a model list the server won't give", async () => {
-    stubFetch(() => json({ error: { message: "temporarily unavailable" } }, { status: 500 }));
-    const provider = new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk-test", null, 60_000);
-    expect(await failure(provider.listModels())).toMatchObject({ kind: "provider" });
-  });
-
-  it("treats an unreadable model list as empty", async () => {
-    stubFetch(() => new Response("not json", { status: 200, headers: { "content-type": "text/plain" } }));
-    const provider = new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk-test", null, 60_000);
-    expect(await provider.listModels()).toEqual([]);
-  });
-
-  it("asks for a key before chatting", async () => {
-    const provider = new OpenCodeGoProvider("https://opencode.ai/inference/go", null, "glm-5.3-flash", 60_000);
-    expect(await failure(provider.complete(ask))).toMatchObject({
-      kind: "config",
-      message: "Add your OpenCode API key in Settings → AI provider first.",
-    });
-  });
-
-  it("explains a key without a Go plan", async () => {
-    stubFetch(() => json({ error: { message: "An active OpenCode Go subscription is required to use Go models." } }, { status: 403 }));
-    const provider = new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk-wrong-plan", "glm-5.3-flash", 60_000);
-    const error = await failure(provider.complete(ask));
-    expect(error).toMatchObject({ kind: "config", message: expect.stringContaining("Go or Go Plus") });
-    expect(error.detail ?? "").not.toContain("oc_sk");
-  });
-
-  it("explains a workspace region restriction", async () => {
-    stubFetch(() =>
-      json(
-        { error: { message: "This Go model requires Global regions. Select Global in your workspace's Privacy settings to use it." } },
-        { status: 403 },
-      ),
-    );
-    const provider = new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk-test", "deepseek-v4.1-flash", 60_000);
-    const error = await failure(provider.complete(ask));
-    expect(error).toMatchObject({ kind: "config", message: expect.stringContaining("Global regions") });
-  });
-
-  it("explains a model that needs training opt-in, and a free one", async () => {
-    stubFetch(() => json({ error: { message: "This contributor model trains on request data." } }, { status: 403 }));
-    const contributor = new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk-test", "muse-spark-1.3-contributor", 60_000);
-    expect(await failure(contributor.complete(ask))).toMatchObject({
-      kind: "config",
-      message: expect.stringContaining("train on request data"),
-    });
-
-    stubFetch(() => json({ error: { message: "Free models are only available from within OpenCode." } }, { status: 403 }));
-    const free = new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk-test", "beam-free", 60_000);
-    expect(await failure(free.complete(ask))).toMatchObject({
-      kind: "config",
-      message: "That model is only available inside OpenCode. Pick a paid model included in your Go plan.",
-    });
-  });
-
-  it("keeps a 403 it can't explain as a key problem", async () => {
-    stubFetch(() => json({ error: { message: "Forbidden" } }, { status: 403 }));
-    const provider = new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk-test", "glm-5.3-flash", 60_000);
-    expect(await failure(provider.complete(ask))).toMatchObject({ kind: "auth" });
-  });
-
-  it("lets the base provider map a failure it doesn't explain", async () => {
-    stubFetch(() => refused());
-    const provider = new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk-test", "glm-5.3-flash", 60_000);
-    expect(await failure(provider.complete(ask))).toMatchObject({ kind: "unreachable" });
-  });
-
-  it("mentions the Go plan's limits when requests are throttled", async () => {
-    stubFetch(() => json({ error: { message: "Provider rate limit exceeded" } }, { status: 429 }));
-    const provider = new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk-test", "glm-5.3-flash", 60_000);
-    const error = await failure(provider.complete(ask));
-    expect(error).toMatchObject({ kind: "rate-limited", message: expect.stringContaining("5-hour") });
   });
 });
 
@@ -766,5 +670,117 @@ describe("MockProvider", () => {
     expect(provider.calls).toHaveLength(2);
     const wrong = new MockProvider({ reply: () => ({ name: "Jane" }) });
     expect(await failure(wrong.complete({ ...ask, schema: Person }))).toMatchObject({ kind: "invalid-output" });
+  });
+});
+
+describe("token counts (#290)", () => {
+  /** A sink that keeps what it's given. */
+  const counted = () => {
+    const entries: UsageEntry[] = [];
+    return { entries, sink: (entry: UsageEntry) => void entries.push(entry) };
+  };
+  const completion = (content: string, usage?: unknown, finish_reason = "stop", reasoning?: string) =>
+    json({
+      id: "c1",
+      object: "chat.completion",
+      created: 0,
+      model: "gpt",
+      choices: [{ index: 0, message: { role: "assistant", content, ...(reasoning ? { reasoning_content: reasoning } : {}) }, finish_reason }],
+      ...(usage ? { usage } : {}),
+    });
+
+  it("passes Ollama's counts on with the task, the provider and the model", async () => {
+    stubFetch(() => json({ model: "qwen2.5:3b", message: { role: "assistant", content: "Hi" }, done: true, prompt_eval_count: 120, eval_count: 8 }));
+    const { entries, sink } = counted();
+    await new OllamaProvider("http://ollama:11434", "qwen2.5:3b", 60_000, sink).complete({ ...ask, task: "write-email" });
+    expect(entries).toEqual([{ task: "write-email", provider: "LOCAL", model: "qwen2.5:3b", input: 120, output: 8 }]);
+  });
+
+  it("reads an OpenAI-compatible server's usage, and nothing from one that sends none", async () => {
+    let call = 0;
+    stubFetch(() => (call++ === 0 ? completion("Hi", { prompt_tokens: 50, completion_tokens: 900, total_tokens: 950, completion_tokens_details: { reasoning_tokens: 880 } }) : completion("Hi")));
+    const { entries, sink } = counted();
+    const provider = new OpenAICompatibleProvider("OPENAI", "https://usage.example/v1", "sk", "gpt-x", 60_000, sink);
+    await provider.complete(ask);
+    await provider.complete(ask);
+    expect(entries).toEqual([
+      // The thinking is in the completion tokens.
+      { task: "connection-check", provider: "OPENAI", model: "gpt-x", input: 50, output: 900 },
+      { task: "connection-check", provider: "OPENAI", model: "gpt-x", input: null, output: null },
+    ]);
+  });
+
+  it("counts an answer cut off while thinking as well as the one asked again with room", async () => {
+    stubFetch(({ body }) =>
+      (body as { max_tokens: number }).max_tokens > 4096
+        ? completion('{"name":"Jane","years":9}', { prompt_tokens: 60, completion_tokens: 5_000 }, "stop", "Hmm…")
+        : completion("", { prompt_tokens: 60, completion_tokens: 4_096 }, "length", "Hmm…"),
+    );
+    const { entries, sink } = counted();
+    await new OpenAICompatibleProvider("OPENAI", "https://usage-thinker.example/v1", "sk", "glm-5", 60_000, sink).complete({ ...ask, schema: Person });
+    expect(entries.map(({ input, output }) => [input, output])).toEqual([
+      [60, 4_096],
+      [60, 5_000],
+    ]);
+  });
+
+  it("counts both answers when the first didn't match the schema, and still counts answers that end in an error", async () => {
+    const answers = ['{"name":"Jane"}', '{"name":"Jane","years":9}'];
+    stubFetch(() => completion(answers.shift() ?? "", { prompt_tokens: 40, completion_tokens: 10 }));
+    const { entries, sink } = counted();
+    const provider = new OpenAICompatibleProvider("OPENAI", "https://usage-retry.example/v1", "sk", "gpt-x", 60_000, sink);
+    expect(await provider.complete({ ...ask, schema: Person })).toEqual({ name: "Jane", years: 9 });
+    expect(entries).toHaveLength(2);
+    // Wrong twice: an error, after two answers that used tokens.
+    expect(await failure(provider.complete({ ...ask, schema: Person }))).toMatchObject({ kind: "invalid-output" });
+    expect(entries).toHaveLength(4);
+  });
+
+  it("counts nothing for a request the server turns down", async () => {
+    stubFetch(() => json({ error: { message: "Invalid API key" } }, { status: 401 }));
+    const { entries, sink } = counted();
+    await failure(new OpenAICompatibleProvider("OPENAI", "https://usage-401.example/v1", "sk", "gpt-x", 60_000, sink).complete(ask));
+    expect(entries).toEqual([]);
+  });
+
+  it("adds Anthropic's cached input to the input, and counts an answer the model declined", async () => {
+    const message = (stop_reason: string) =>
+      json({
+        id: "m1",
+        type: "message",
+        role: "assistant",
+        model: "claude-sonnet-5",
+        content: [{ type: "text", text: "Hello!" }],
+        stop_reason,
+        usage: { input_tokens: 10, cache_creation_input_tokens: 200, cache_read_input_tokens: 1_000, output_tokens: 50 },
+      });
+    let call = 0;
+    stubFetch(() => message(call++ === 0 ? "end_turn" : "refusal"));
+    const { entries, sink } = counted();
+    const provider = new AnthropicProvider("https://api.anthropic.com", "sk-ant", "claude-sonnet-5", 60_000, sink);
+    await provider.complete({ ...ask, task: "refine-chat" });
+    await failure(provider.complete({ ...ask, task: "refine-chat" }));
+    expect(entries).toEqual([
+      { task: "refine-chat", provider: "ANTHROPIC", model: "claude-sonnet-5", input: 1_210, output: 50 },
+      { task: "refine-chat", provider: "ANTHROPIC", model: "claude-sonnet-5", input: 1_210, output: 50 },
+    ]);
+  });
+
+  it("names Mistral and a local server as the provider", async () => {
+    stubFetch(({ url }) => (url.pathname === "/api/version" ? json({ version: "0.34.4" }) : url.pathname === "/api/chat" ? ollamaChat("Hi") : completion("Hi", { prompt_tokens: 7, completion_tokens: 3 })));
+    const { entries, sink } = counted();
+    await new MistralProvider("https://api.mistral.ai/v1", "key", "mistral-medium-latest", 60_000, sink).complete(ask);
+    await new LocalProvider("http://ollama-usage:11434", "qwen2.5:3b", 60_000, sink).complete(ask);
+    expect(entries).toEqual([
+      { task: "connection-check", provider: "MISTRAL", model: "mistral-medium-latest", input: 7, output: 3 },
+      // ollamaChat sends no counts.
+      { task: "connection-check", provider: "LOCAL", model: "qwen2.5:3b", input: null, output: null },
+    ]);
+  });
+
+  it("counts Test connection as a connection check", async () => {
+    const { entries, sink } = counted();
+    await new MockProvider({ tokens: { input: 20, output: 1 }, onUsage: sink }).test();
+    expect(entries).toEqual([{ task: "connection-check", provider: "MOCK", model: "mock-model", input: 20, output: 1 }]);
   });
 });

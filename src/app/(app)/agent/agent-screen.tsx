@@ -13,6 +13,7 @@ import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useJob } from "@/hooks/use-job";
 import type { AgentCandidateView, AgentView } from "@/lib/agent/view";
+import { AGENT_MAX_SOURCE_REQUESTS_PER_DAY } from "@/lib/agent/limits";
 
 import { approveAgentDraft, dismissAgentCandidate, prepareAgentDraft, restoreAgentCandidate, runAgentNow } from "./actions";
 
@@ -23,6 +24,7 @@ const SETTINGS: Record<NonNullable<AgentView["setupSection"]>, { href: string; l
   agent: { href: "/settings?section=agent", label: "Settings → Job agent" },
   ai: { href: "/settings?section=ai", label: "Settings → AI provider" },
   jobs: { href: "/settings?section=jobs", label: "Settings → Job search" },
+  scoring: { href: "/settings?section=scoring", label: "Settings → Scoring" },
 };
 
 /**
@@ -36,7 +38,6 @@ export function AgentScreen({ view }: { view: AgentView }) {
   const [runJobId, setRunJobId] = useState(view.runJobId);
   const [showBelow, setShowBelow] = useState(false);
   const [hidden, setHidden] = useState<Set<string>>(new Set());
-  const [searchId, setSearchId] = useState<string | null>(null);
   const [confirming, setConfirming] = useState<AgentCandidateView | null>(null);
 
   const run = useJob<ScanResult>(runJobId, 0, (job) => {
@@ -86,11 +87,8 @@ export function AgentScreen({ view }: { view: AgentView }) {
     });
 
   const drafts = view.drafts.filter((candidate) => !hidden.has(candidate.id));
-  // A search that no longer has a button (its postings are gone) stops filtering.
-  const active = view.filters.some((filter) => filter.id === searchId) ? searchId : null;
-  const shown = (candidate: AgentCandidateView) => !hidden.has(candidate.id) && (!active || candidate.search?.id === active);
-  const scored = view.scored.filter(shown);
-  const below = view.belowMinimum.filter(shown);
+  const scored = view.scored.filter((candidate) => !hidden.has(candidate.id));
+  const below = view.belowMinimum.filter((candidate) => !hidden.has(candidate.id));
   const empty = drafts.length === 0 && scored.length === 0;
 
   return (
@@ -100,16 +98,17 @@ export function AgentScreen({ view }: { view: AgentView }) {
         description="Once a day it searches for new postings, scores them against your profile, and keeps the best here for you. Drafts wait for your review, and nothing is ever sent."
         actions={
           <Button aria-disabled={running || pending || undefined} onClick={() => !running && !pending && runNow()}>
-            {running ? "Running…" : "Run now"}
+            {running ? "Running…" : "Run all now"}
           </Button>
         }
       />
-      <div className="flex flex-col gap-8 px-10 pb-20">
+      <div className="flex flex-col gap-8 px-4 pb-20 sm:px-10">
         <Notices view={view} />
 
         <Card padding="none" className="px-7 py-2">
           <dl>
-            <Fact label="Searches for">{view.searchSummary ?? "Nothing yet"}</Fact>
+            <Fact label="Agent">{view.enabled ? "Enabled" : "Off"}</Fact>
+            <Fact label="Enabled searches">{view.searches.filter((search) => search.enabled).length} of {view.searches.length}</Fact>
             <Fact label="Last run">
               {view.lastRun ? (
                 <>
@@ -121,12 +120,42 @@ export function AgentScreen({ view }: { view: AgentView }) {
               )}
             </Fact>
             <Fact label="Next run">{view.nextRun ?? "Off"}</Fact>
+            <Fact label="Source requests available">{Math.max(0, AGENT_MAX_SOURCE_REQUESTS_PER_DAY - view.sourceRequestsUsed)} of {AGENT_MAX_SOURCE_REQUESTS_PER_DAY} in the rolling 24-hour budget</Fact>
+            <Fact label="Whole-batch quota eligibility">{view.nextEligibility} ({view.timeZone})</Fact>
           </dl>
           {running && (
             <p role="status" className="border-t border-line py-3.5 text-sm text-muted">
               {run?.step ?? "Starting the run…"}
             </p>
           )}
+        </Card>
+
+        <Card padding="none" className="flex flex-col gap-4 px-7 py-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="font-serif text-section">Recurring searches</h2>
+            <Link href="/settings?section=agent" className="text-meta text-muted underline underline-offset-2">Manage searches and shared schedule</Link>
+          </div>
+          {view.searches.length === 0 ? <p className="text-meta text-muted">No saved searches yet.</p> : <ol className="flex flex-col gap-3">
+            {view.searches.map((search) => {
+              const last = view.searchHistory.find((result) => result.searchId === search.id);
+              return <li key={search.id} className="border-t border-line pt-3 text-sm">
+                <p className="break-words font-medium">{search.name} · {search.enabled ? "Enabled" : "Disabled"}</p>
+                <p className="text-meta text-muted break-words">{search.query.keywords}{search.query.place ? ` · ${search.query.place}` : ""} · {search.query.country.toUpperCase() || "No country selected"}</p>
+                <p className="text-meta text-muted">{last ? `${last.error ? "Last source request failed" : "Last source request completed"}: ${last.at} · ${last.found} found · ${last.fresh} new to agent` : "Not run yet (no retained result)."}</p>
+                {last && <p className="text-xs text-muted">{last.batchMessage ? `Batch outcome: ${last.batchMessage}` : "Batch pending or still processing; discovery counts may be incomplete."}</p>}
+                {last?.searchName !== undefined && last.searchName !== search.name && <p className="text-xs text-muted">Run as “{last.searchName}”</p>}
+                {last?.error && <p className="text-meta text-error">{last.error}</p>}
+              </li>;
+            })}
+          </ol>}
+          {view.searchResults.length > 0 && <div className="border-t border-line pt-3">
+            <h3 className="text-field font-medium">Last batch discovery results</h3>
+            <ul className="mt-2 flex flex-col gap-2 text-meta text-muted">{view.searchResults.map((result) => <li key={result.searchId} className="break-words">
+              {result.searchName}{!view.searches.some((search) => search.id === result.searchId) ? " (deleted search)" : ""}: {result.found} found · {result.fresh} new to agent{result.error ? ` · Source request failed: ${result.error}` : " · Source request completed"}
+            </li>)}</ul>
+          </div>}
+          <p className="text-meta text-muted">Found counts may overlap between searches; do not add them up as unique postings. New to agent is counted at each search, before the shared batch is deduplicated and scored. Candidates retain the search names used when found, even after renaming or deletion.</p>
+          <p className="text-meta text-muted">One first-page source request per enabled search, sequentially. The shared limit is {AGENT_MAX_SOURCE_REQUESTS_PER_DAY} requests in a rolling 24 hours, including failed attempts. All-run waits until the whole batch fits; manual runs also wait at least an hour after the previous run. Each run shares a limit of {view.maxScores} AI scores{view.autoDraft ? ` and ${view.maxDrafts} automatic drafts` : "; automatic drafts are off"} across all searches.</p>
         </Card>
 
         <Section title="Drafts to review" count={drafts.length}>
@@ -167,21 +196,6 @@ export function AgentScreen({ view }: { view: AgentView }) {
         </Section>
 
         <Section title="Scored postings" count={scored.length}>
-          {view.filters.length > 0 && (
-            <div role="group" aria-label="Show postings from" className="flex flex-wrap gap-2">
-              {[{ id: null, name: "All searches", count: view.scored.length + view.belowMinimum.length }, ...view.filters].map((filter) => (
-                <button
-                  key={filter.id ?? "all"}
-                  type="button"
-                  aria-pressed={active === filter.id}
-                  onClick={() => setSearchId(filter.id)}
-                  className="rounded-full border border-line px-3.5 py-1.5 text-meta text-ink aria-pressed:border-ink aria-pressed:bg-ink aria-pressed:text-on-primary"
-                >
-                  {filter.name} · {filter.count}
-                </button>
-              ))}
-            </div>
-          )}
           {scored.length === 0 ? (
             <Empty>{empty ? "Nothing waiting yet. A run puts the postings that fit you best here." : "No postings waiting for a draft."}</Empty>
           ) : (
@@ -257,7 +271,7 @@ function Notices({ view }: { view: AgentView }) {
       </>,
     );
   }
-  if (view.limitReached) return note("The agent has run 3 times in the past 24 hours, as many as it may. It runs again once a day has passed since the first.");
+  if (view.limitReached) return note(`The whole batch needs more source requests than are available. Quota is next available ${view.nextEligibility} (${view.timeZone}).`);
   return null;
 }
 
@@ -304,13 +318,11 @@ function CandidateCard({ candidate, children }: { candidate: AgentCandidateView;
     <Card padding="none" className="flex flex-col gap-3.5 px-6 py-5">
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 flex-col gap-0.5">
-          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-            <h3 className="font-serif text-[20px] leading-tight text-pretty">{candidate.title}</h3>
-            {candidate.search && <span className="rounded-full border border-line-field bg-paper px-2.5 py-0.5 text-xs text-muted">{candidate.search.name}</span>}
-          </div>
+          <h3 className="font-serif text-[20px] leading-tight text-pretty">{candidate.title}</h3>
           {candidate.company && <p className="text-sm text-ink">{candidate.company}</p>}
           {candidate.facts && <p className="text-meta text-muted">{candidate.facts}</p>}
           {candidate.origin && <p className="text-xs text-muted">{candidate.origin}</p>}
+          {candidate.searches.length > 0 && <p className="text-xs text-muted break-words">Found by: {candidate.searches.map((search) => `${search.searchName}${search.searchId === null ? " (deleted search)" : ""}`).join(" · ")}</p>}
           {/* As the source's terms ask (E14-2); the origin names the others. */}
           {linksAttribution(candidate.source) && <SourceAttribution source={candidate.source} url={candidate.url} className="mt-1.5 self-start" />}
         </div>

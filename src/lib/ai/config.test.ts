@@ -34,7 +34,7 @@ describe("resolveAiConfig", () => {
     expect(config).toMatchObject({
       provider: "ANTHROPIC",
       baseUrl: "https://api.anthropic.com",
-      model: "claude-sonnet-5",
+      model: "claude-sonnet-5-5",
       apiKey: "sk-env",
       timeoutMs: 90_000,
     });
@@ -44,18 +44,8 @@ describe("resolveAiConfig", () => {
     expect(resolveAiConfig(nothingSaved, { DOSSIER_AI_PROVIDER: "mistral", DOSSIER_AI_KEY: "mk-env" })).toMatchObject({
       provider: "MISTRAL",
       baseUrl: "https://api.mistral.ai/v1",
-      model: "mistral-medium-latest",
+      model: "mistral-small-2603",
       apiKey: "mk-env",
-      timeoutMs: 120_000,
-    });
-  });
-
-  it("knows OpenCode Go's base URL and a default model", () => {
-    expect(resolveAiConfig(nothingSaved, { DOSSIER_AI_PROVIDER: "opencode-go", DOSSIER_AI_KEY: "oc_sk-env" })).toMatchObject({
-      provider: "OPENCODE_GO",
-      baseUrl: "https://opencode.ai/inference/go",
-      model: "glm-5.3-flash",
-      apiKey: "oc_sk-env",
       timeoutMs: 120_000,
     });
   });
@@ -94,7 +84,6 @@ describe("createProvider", () => {
     const base = { baseUrl: "http://x", model: "m", apiKey: "k", apiKeyProblem: null, timeoutMs: 1000 };
     expect(createProvider({ ...base, provider: "LOCAL" }).kind).toBe("LOCAL");
     expect(createProvider({ ...base, provider: "OPENAI" }).kind).toBe("OPENAI");
-    expect(createProvider({ ...base, provider: "OPENCODE_GO" }).kind).toBe("OPENCODE_GO");
     expect(createProvider({ ...base, provider: "ANTHROPIC" }).kind).toBe("ANTHROPIC");
     expect(createProvider({ ...base, provider: "MISTRAL" }).kind).toBe("MISTRAL");
     expect(createProvider({ ...base, provider: "LMSTUDIO" }).kind).toBe("LMSTUDIO");
@@ -119,7 +108,5 @@ describe("isAiUsable (#221)", () => {
     expect(await usable({ provider: "ANTHROPIC" })).toBe(false);
     expect(await usable({ provider: "ANTHROPIC", apiKeyEnc: encryptApiKey("sk-saved") })).toBe(true);
     expect(await usable({ provider: "MISTRAL", apiKeyEnc: encryptApiKey("sk", "b".repeat(32)) })).toBe(false);
-    expect(await usable({ provider: "OPENCODE_GO" })).toBe(false);
-    expect(await usable({ provider: "OPENCODE_GO", apiKeyEnc: encryptApiKey("oc_sk-saved") })).toBe(true);
   });
 });

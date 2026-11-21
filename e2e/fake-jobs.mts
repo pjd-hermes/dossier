@@ -3,11 +3,15 @@
 // (DOSSIER_JOBS_TEST_BASE_URL), and this answers in that source's own shape,
 // so the adapters' real request and response handling runs end to end.
 
+import { createHash } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 
 const port = Number(process.env.FAKE_JOBS_PORT ?? 3998);
 /** The JSearch key the app is given in e2e/support.ts. */
 const JSEARCH_KEY = "e2e-jsearch-key";
+// Equal fixture dates keep shared score-cap ordering stable even if creating
+// the three postings straddles a millisecond boundary.
+const postedAt = new Date(Date.now() - 2 * 86_400_000).toISOString();
 /** The TypeSafe key a spec saves in Settings → Scoring (#274). */
 const TYPESAFE_KEY = "e2e-typesafe-key";
 
@@ -20,7 +24,7 @@ const job = (id: string, title: string, company: string, extra: Record<string, u
   apply_options: [{ publisher: "LinkedIn", apply_link: `https://jobs.example/${id}`, is_direct: false }],
   job_description: `${company} is hiring a ${title}.\n\nWhat you'll do\n- Design checkout flows\n- Work with research\n\nWhat we're looking for\n- 5+ years of product design\n- Strong prototyping skills in Figma`,
   job_is_remote: false,
-  job_posted_at_datetime_utc: new Date(Date.now() - 2 * 86_400_000).toISOString(),
+  job_posted_at_datetime_utc: postedAt,
   job_location: "Rotterdam  •  via LinkedIn",
   job_country: "NL",
   ...extra,
@@ -89,9 +93,37 @@ let searches = 0;
 /** The usage pings the app sent here (DOSSIER_USAGE_PING_TEST_URL), so a spec can tell whether one went (#172). */
 const pings: unknown[] = [];
 
+// The project's backend (DOSSIER_API_URL, E18), in the shape of its contract.
+// A spec says what it answers; it's "ok" with no notices until then.
+let announcements: unknown = [];
+let announcementsAnswer: "ok" | "down" | "silent" = "ok";
+const announcementRequests: { url: string | undefined; headers: IncomingMessage["headers"] }[] = [];
+
+function answerAnnouncements(request: IncomingMessage, response: ServerResponse) {
+  announcementRequests.push({ url: request.url, headers: request.headers });
+  // It never answers, so the app's own timeout has to end the request.
+  if (announcementsAnswer === "silent") return;
+  if (announcementsAnswer === "down") return send(response, 503, { error: { code: "unavailable", message: "Down for maintenance." } });
+  const body = JSON.stringify({ announcements });
+  const headers = { "cache-control": "public, max-age=21600", etag: `"${createHash("sha256").update(body).digest("hex").slice(0, 16)}"` };
+  if (request.headers["if-none-match"] === headers.etag) return void response.writeHead(304, headers).end();
+  response.writeHead(200, { "content-type": "application/json", ...headers }).end(body);
+}
+
 createServer((request, response) => {
   const url = new URL(request.url ?? "/", `http://localhost:${port}`);
   if (url.pathname === "/health") return send(response, 200, { ok: true });
+  if (url.pathname === "/v1/announcements") return answerAnnouncements(request, response);
+  if (url.pathname === "/announcement-requests") return send(response, 200, { requests: announcementRequests });
+  if (url.pathname === "/announcement-answer" && request.method === "POST") {
+    let body = "";
+    request.on("data", (chunk: Buffer) => (body += chunk.toString()));
+    request.on("end", () => {
+      ({ announcements, answer: announcementsAnswer } = JSON.parse(body) as { announcements: unknown; answer: typeof announcementsAnswer });
+      response.writeHead(204).end();
+    });
+    return;
+  }
   if (url.pathname === "/searches") return send(response, 200, { searches });
   if (url.pathname === "/pings") return send(response, 200, { pings });
   if (url.pathname === "/startup-requests") return send(response, 200, { requests: siteRequests });
@@ -141,6 +173,8 @@ createServer((request, response) => {
   if (url.pathname === "/jsearch/search-v2") {
     if (request.headers["x-api-key"] !== JSEARCH_KEY) return send(response, 401, { status: "ERROR", error: { message: "Invalid API key" } });
     searches += 1;
+    // Deterministic agent partial-failure coverage, never a real source call.
+    if (/agent-source-failure/.test(url.searchParams.get("query") ?? "")) return send(response, 503, { status: "ERROR", error: { message: "Fixture unavailable" } });
     // "nothing" finds nothing; otherwise two pages, joined by a cursor.
     if (/nothing/i.test(url.searchParams.get("query") ?? "")) return send(response, 200, { status: "OK", data: { jobs: [], cursor: null } });
     const second = url.searchParams.get("cursor") === "PAGE-2";
