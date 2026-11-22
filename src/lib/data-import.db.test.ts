@@ -327,6 +327,20 @@ describe("importExport (E10-6)", () => {
     ]);
   });
 
+  it("keeps what was found out about a posting, a fork addition (vetting)", async () => {
+    const vetting = { verdict: "scam", note: "Asks for a fee", checks: [{ name: "Company site", result: "No such company" }], checkedBy: "n8n", checkedAt: "2026-11-22T00:00:00.000Z" };
+    await prisma().posting.create({ data: { source: "JSEARCH", externalId: "vetted", vetting } });
+    await prisma().posting.create({ data: { source: "JSEARCH", externalId: "plain" } });
+    const file = await asFile();
+    expect(file.postings.find((posting) => posting.externalId === "vetted")?.vetting).toEqual(vetting);
+    await importExport(prisma(), file);
+    const rows = await prisma().posting.findMany({ orderBy: { externalId: "asc" }, select: { externalId: true, vetting: true } });
+    expect(rows).toEqual([
+      { externalId: "plain", vetting: null },
+      { externalId: "vetted", vetting },
+    ]);
+  });
+
   it("moves what a search from before version 12 kept as JSON into the library", async () => {
     const file = await asFile();
     const old = {

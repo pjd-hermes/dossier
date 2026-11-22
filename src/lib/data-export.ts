@@ -439,6 +439,8 @@ const posting = z.object({
   archivedAt: optionalDate.optional(),
   movedBackAt: optionalDate.optional(),
   removedAt: optionalDate.optional(),
+  /** Fork addition (src/lib/vetting.ts), without a version bump so upstream's numbering stays its own: older files lack it, and upstream's importer ignores it. */
+  vetting: z.unknown().nullable().optional(),
   createdAt: date,
   updatedAt: date,
 });
