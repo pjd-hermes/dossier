@@ -15,6 +15,7 @@ JSearch did not find the government postings in PJ's own testing.
 | 5 | Upstream sync script and `-pjd` release workflow | Makes each upstream release (now 1.15.1) a repeatable merge, with release notes that name the upstream release. The tag format and release workflow come from PR #4 | [2026-10-31-sync-and-release.md](2026-10-31-sync-and-release.md) |
 | 6 | Follow-up reminders and stale-application nudges | Dashboard card for applications with no reply after N days, with an AI-drafted follow-up built on the inbox and Gmail code. Built together with step 7 | to write |
 | 7 | ~~Duplicate and ghost-job detection~~ **Superseded by upstream 1.13 to 1.15** for duplicates (the same job from several portals is one position, and a posting's "still listed" check); flagging long-reposted postings is not checked, re-open this row if it is still wanted | Several portals on at once means the same posting repeats | Built into upstream; nothing left to write unless reposts matter |
+| 8 | Access tokens for the MCP endpoint, and tools to check what the job agent found (read finds, company history, record a verdict, dismiss, restore) | Lets n8n or Claude vet each run's finds without OAuth or a chat: scams are dismissed and the verdict is kept with the posting | [2026-11-22-mcp-token-and-agent-finds.md](2026-11-22-mcp-token-and-agent-finds.md) (built) |
 
 ## Ideas, TBD
 
