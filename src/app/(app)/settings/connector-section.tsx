@@ -9,8 +9,10 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Toggle } from "@/components/ui/toggle";
 import { copyText } from "@/lib/copy-text";
+import type { TokenInfo } from "@/lib/connector/tokens";
 
 import { addConnectorRedirect, disconnectApps, removeConnectorRedirect, setConnector } from "./actions";
+import { ConnectorTokens } from "./connector-tokens";
 import { SettingsSectionIntro } from "./settings-screen";
 
 const LINK = "font-medium text-ink underline underline-offset-2";
@@ -26,7 +28,7 @@ export function ConnectorSection({
   address,
   inDesktopApp = false,
 }: {
-  initial: { on: boolean; redirects: string[] };
+  initial: { on: boolean; redirects: string[]; /** Fork: the named access tokens (connector-tokens.tsx). */ tokens?: TokenInfo[] };
   address: string;
   /** On this computer, in the desktop app: an app's approval page opens in the browser, which the app signs in (#365). */
   inDesktopApp?: boolean;
@@ -169,6 +171,8 @@ export function ConnectorSection({
               </Button>
             </div>
           </Card>
+
+          <ConnectorTokens initial={initial.tokens ?? []} />
 
           <Card className="flex flex-col gap-3 text-sm text-pretty">
             <p>

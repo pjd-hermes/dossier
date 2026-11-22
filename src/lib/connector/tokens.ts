@@ -16,6 +16,9 @@ import { connectorSince } from "./oauth";
 // settings, so it can be revoked on its own. They work only while the
 // connector is on. They're the install's: exports leave them out.
 
+/** A problem with what the user asked for, in words to show them. */
+export class TokenError extends Error {}
+
 export type TokenScope = "read" | "dismiss";
 export type TokenInfo = { id: string; name: string; scope: TokenScope; createdAt: string; lastUsedAt: string | null };
 
@@ -39,11 +42,11 @@ function sameHash(a: string, b: string): boolean {
 /** Makes a token: the text is returned here once and never kept. */
 export async function createToken({ name, scope }: { name: string; scope: TokenScope }): Promise<{ token: string; info: TokenInfo }> {
   const clean = name.trim();
-  if (!clean) throw new Error("Give the token a name.");
-  if (clean.length > MAX_NAME) throw new Error(`At most ${MAX_NAME} characters.`);
+  if (!clean) throw new TokenError("Give the token a name.");
+  if (clean.length > MAX_NAME) throw new TokenError(`At most ${MAX_NAME} characters.`);
   const { connectorTokens } = await loadSettings();
-  if (connectorTokens.length >= MAX_TOKENS) throw new Error(`That's ${MAX_TOKENS} tokens already.`);
-  if (connectorTokens.some((entry) => entry.name.toLowerCase() === clean.toLowerCase())) throw new Error("There's a token with that name already.");
+  if (connectorTokens.length >= MAX_TOKENS) throw new TokenError(`That's ${MAX_TOKENS} tokens already.`);
+  if (connectorTokens.some((entry) => entry.name.toLowerCase() === clean.toLowerCase())) throw new TokenError("There's a token with that name already.");
   const token = `${PREFIX}${randomBytes(32).toString("base64url")}`;
   const stored: Stored = { id: randomUUID(), name: clean, scope, hash: hashOf(token), createdAt: new Date().toISOString() };
   await saveSettings({ connectorTokens: [...connectorTokens, stored] });
