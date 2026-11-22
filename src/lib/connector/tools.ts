@@ -45,6 +45,7 @@ import { applyStatusChange } from "@/lib/status-changes";
 import { appVersion } from "@/lib/version";
 
 import { connectorDraftJob } from "./draft";
+import { type ConnectorAccess, FULL_ACCESS, limitTools } from "./scopes";
 import { readPastedPosting } from "./handoff";
 import {
   reviseWrittenApplication,
@@ -195,7 +196,7 @@ const answersSchema = z.object({
 });
 
 /** Dossier as an MCP server, for one request; `origin` is the address links in answers point to. */
-export function createDossierServer(origin: string): McpServer {
+export function createDossierServer(origin: string, access: ConnectorAccess = FULL_ACCESS): McpServer {
   const linkTo = (path: string) => `${origin}${path}`;
   const server = new McpServer(
     { name: "dossier", title: "Dossier", version: appVersion },
@@ -210,6 +211,8 @@ export function createDossierServer(origin: string): McpServer {
         "Nothing is ever sent for the user: drafts wait in Dossier for them to review and download as PDFs.",
     },
   );
+  // Fork: a named access token sees only the tools its scope allows (scopes.ts).
+  limitTools(server, access);
 
   server.registerTool(
     "get_profile",

@@ -1,8 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/lib/env", () => ({ env: { DOSSIER_SECRET: "s".repeat(40), DOSSIER_PASSWORD: "argon2id:m=19456,t=2,p=1:c2FsdA:aGFzaA" } }));
-const settings = vi.hoisted(() => ({ resumeSections: { order: [] as string[], off: [] as string[] }, connectorEnabledAt: "2026-10-23T09:00:00.000Z" as string | null }));
-vi.mock("@/lib/settings-data", () => ({ loadSettings: async () => settings }));
+const settings = vi.hoisted(() => ({
+  resumeSections: { order: [] as string[], off: [] as string[] },
+  connectorEnabledAt: "2026-10-23T09:00:00.000Z" as string | null,
+  connectorTokens: [] as unknown[],
+  connectorTokenUse: {} as Record<string, string>,
+}));
+vi.mock("@/lib/settings-data", () => ({ loadSettings: async () => settings, saveSettings: async (changes: object) => void Object.assign(settings, changes) }));
 vi.mock("@/lib/profiles", () => ({
   loadProfileSettings: async () => settings,
   listProfiles: async () => [{ id: "first", name: "My profile" }],
@@ -27,6 +32,7 @@ vi.mock("@/lib/posting-searches", () => ({
 
 import { demoProfile } from "@/lib/demo-profile";
 import { challengeOf, exchangeCode, issueCode, registerClient } from "@/lib/connector/oauth";
+import { createToken, revokeToken, type TokenScope } from "@/lib/connector/tokens";
 
 import { GET, POST } from "./route";
 
@@ -67,8 +73,12 @@ const tool = async (name: string, args: Record<string, unknown>) => {
 
 beforeEach(() => {
   settings.connectorEnabledAt = "2026-10-23T09:00:00.000Z";
+  settings.connectorTokens = [];
+  settings.connectorTokenUse = {};
   searches.ran = [];
 });
+
+const toolNames = async (token: string) => (await answer(await call({ jsonrpc: "2.0", id: 2, method: "tools/list" }, token))).result?.tools?.map((entry) => entry.name).sort();
 
 describe("the Claude connector at /api/mcp (#221)", () => {
   it("isn't there while the connector is off", async () => {
@@ -111,6 +121,48 @@ describe("the Claude connector at /api/mcp (#221)", () => {
       "set_application_status",
       "update_application",
     ]);
+  });
+
+  describe("with a named access token (fork)", () => {
+    const READ_ONLY = ["check_draft", "get_application", "get_posting", "get_profile", "list_applications"];
+
+    it("lets a read token look, and nothing that writes or spends a portal's searches", async () => {
+      const { token } = await createToken({ name: "n8n", scope: "read" });
+      expect(await toolNames(token)).toEqual(READ_ONLY);
+    });
+
+    it("hides what the token's scope doesn't allow, as if it weren't there", async () => {
+      const { token } = await createToken({ name: "n8n", scope: "read" });
+      const { result, error } = await answer(await call({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "save_application", arguments: {} } }, token));
+      expect(result?.isError ?? true).toBe(true);
+      expect(JSON.stringify(error ?? result)).not.toMatch(/disabled/i);
+    });
+
+    it("answers a read token's tool calls", async () => {
+      const { token } = await createToken({ name: "n8n", scope: "read" });
+      const { result } = await answer(await call({ jsonrpc: "2.0", id: 3, method: "tools/call", params: { name: "get_profile", arguments: {} } }, token));
+      expect(result?.isError ?? false).toBe(false);
+      expect(JSON.parse(result!.content![0]!.text)).toMatchObject({ profile: "My profile" });
+    });
+
+    it("keeps every tool for Claude's own sign-in", async () => {
+      expect((await toolNames(await accessToken()))!.length).toBe(12);
+    });
+
+    it("stops at once when revoked, with the same 401 as any other unknown token", async () => {
+      const { token, info } = await createToken({ name: "n8n", scope: "read" });
+      expect((await call({ jsonrpc: "2.0", id: 2, method: "tools/list" }, token)).status).toBe(200);
+      await revokeToken(info.id);
+      const response = await call({ jsonrpc: "2.0", id: 2, method: "tools/list" }, token);
+      expect(response.status).toBe(401);
+      expect(response.headers.get("www-authenticate")).toContain("resource_metadata=");
+    });
+
+    it("isn't there while the connector is off", async () => {
+      const { token } = await createToken({ name: "n8n", scope: "read" as TokenScope });
+      settings.connectorEnabledAt = null;
+      expect((await call({ jsonrpc: "2.0", id: 2, method: "tools/list" }, token)).status).toBe(404);
+    });
   });
 
   it("gives Claude the profile without contact details", async () => {

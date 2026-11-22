@@ -1,6 +1,8 @@
 import { createMcpHandler } from "@modelcontextprotocol/server";
 
 import { connectorSince, mcpUrl, SCOPE, verifyAccessToken } from "@/lib/connector/oauth";
+import { type ConnectorAccess, FULL_ACCESS } from "@/lib/connector/scopes";
+import { verifyStaticToken } from "@/lib/connector/tokens";
 import { createDossierServer } from "@/lib/connector/tools";
 import { publicOrigin } from "@/lib/google/origin";
 import { logServerError } from "@/lib/log";
@@ -13,7 +15,8 @@ import { logServerError } from "@/lib/log";
 // (src/lib/connector/oauth.ts); the proxy lets it through without a session.
 
 // The address links in answers point to comes along with the token's details.
-const handler = createMcpHandler(({ authInfo }) => createDossierServer(typeof authInfo?.extra?.origin === "string" ? authInfo.extra.origin : ""), {
+// Fork: the token's name and scope come along too (scopes.ts).
+const handler = createMcpHandler(({ authInfo }) => createDossierServer(typeof authInfo?.extra?.origin === "string" ? authInfo.extra.origin : "", (authInfo?.extra?.access as ConnectorAccess | undefined) ?? FULL_ACCESS), {
   onerror: (error) => logServerError("MCP connector", error),
 });
 
@@ -29,10 +32,13 @@ async function handle(request: Request): Promise<Response> {
   if (!(await connectorSince())) return new Response(null, { status: 404 });
   const origin = publicOrigin(request);
   const token = /^Bearer\s+(\S.*)$/i.exec(request.headers.get("authorization") ?? "")?.[1];
-  const access = await verifyAccessToken(token);
-  if (!access) return unauthorized(origin);
+  // Fork: a named access token (tokens.ts) is tried before an OAuth one.
+  const named = await verifyStaticToken(token);
+  const signedIn = named ? null : await verifyAccessToken(token);
+  if (!named && !signedIn) return unauthorized(origin);
+  const access: ConnectorAccess = named ? { scope: named.scope, name: named.name } : FULL_ACCESS;
   try {
-    return await handler.fetch(request, { authInfo: { token: token!, clientId: access.clientId, scopes: [SCOPE], extra: { origin } } });
+    return await handler.fetch(request, { authInfo: { token: token!, clientId: named?.id ?? signedIn!.clientId, scopes: [SCOPE], extra: { origin, access } } });
   } catch (error) {
     logServerError(`MCP connector ${mcpUrl(origin)}`, error);
     return Response.json({ jsonrpc: "2.0", error: { code: -32603, message: "Dossier couldn't answer that." }, id: null }, { status: 500 });
