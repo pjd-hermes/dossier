@@ -4,7 +4,8 @@ import { type CallToolResult, type McpServer } from "@modelcontextprotocol/serve
 import { z } from "zod";
 
 import { companyHistory, listAgentFinds } from "@/lib/agent-finds";
-import { checkSchema, dismissWithReason, recordVetting, restorePosting, VERDICTS } from "@/lib/vetting";
+import { dismissWithReason, recordVetting, restorePosting } from "@/lib/vetting";
+import { checkSchema, VERDICTS } from "@/lib/vetting-shape";
 
 import type { ConnectorAccess } from "./scopes";
 

@@ -5,7 +5,7 @@ import { stringsOf } from "@/lib/agent/candidates";
 import { companyKey } from "@/lib/dedupe";
 import { prisma } from "@/lib/prisma";
 
-import { type Vetting, vettingOf } from "./vetting";
+import { type Vetting, vettingOf } from "./vetting-shape";
 
 // Fork: what the job agent's runs found, and what Dossier knows about a
 // company, for the MCP tools (connector/vetting-tools.ts) that n8n and Claude

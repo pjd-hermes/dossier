@@ -1,37 +1,15 @@
 import "server-only";
 
-import { z } from "zod";
-
 import type { Posting, Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 import { dismissPosting, foundFromPosting, unmarkPosting } from "./postings";
+import type { Verdict } from "./vetting-shape";
 
 // Fork: what was found out about whether a posting is real, kept on the
 // posting (Posting.vetting) and set from the MCP tools (connector/vetting-tools.ts),
 // by n8n or Claude. Dismissing and restoring go through postings.ts, so the
 // library, the Archive and the job agent's queue see one dismissal, not two.
-
-export const VERDICTS = ["legit", "doubtful", "scam"] as const;
-export type Verdict = (typeof VERDICTS)[number];
-
-export const checkSchema = z.object({ name: z.string().trim().min(1).max(80), result: z.string().max(300) });
-
-const vettingSchema = z.object({
-  verdict: z.enum(VERDICTS),
-  note: z.string().max(1000),
-  checks: z.array(checkSchema).max(20),
-  /** The token's name, or "Claude" for the connector's own sign-in. */
-  checkedBy: z.string().max(80),
-  checkedAt: z.string(),
-});
-export type Vetting = z.infer<typeof vettingSchema>;
-
-/** A stored verdict, or null when there is none or it doesn't fit. */
-export function vettingOf(value: Prisma.JsonValue | null | undefined): Vetting | null {
-  const parsed = vettingSchema.safeParse(value);
-  return parsed.success ? parsed.data : null;
-}
 
 type Outcome<T> = ({ ok: true } & T) | { ok: false; message: string };
 

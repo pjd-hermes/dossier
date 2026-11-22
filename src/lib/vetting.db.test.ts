@@ -1,8 +1,10 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { postingStates } from "@/lib/postings";
 import { createTestClient, resetDatabase } from "@/test/db";
 
-import { dismissWithReason, recordVetting, restorePosting, vettingOf } from "./vetting";
+import { dismissWithReason, recordVetting, restorePosting } from "./vetting";
+import { vettingOf } from "./vetting-shape";
 
 const db = vi.hoisted(() => ({ client: undefined as ReturnType<typeof createTestClient> | undefined }));
 vi.mock("@/lib/prisma", async () => {
@@ -40,6 +42,19 @@ describe("vetting what the job agent found (fork)", () => {
       ok: false,
       message: `That posting is the same job as ${shown.id}, which is the one Dossier shows. Use that posting_id.`,
     });
+  });
+
+  it("reaches Positions with the posting's state, without its checks, and not at all without a verdict", async () => {
+    const row = await make("a");
+    const other = await make("b");
+    await recordVetting(row.id, { verdict: "scam", note: "Asks for a fee", checks: [{ name: "Site", result: "none" }] }, "n8n");
+    const states = await postingStates([
+      { source: "JSEARCH", externalId: "a", url: "" },
+      { source: "JSEARCH", externalId: "b", url: "" },
+    ]);
+    expect(states.get("JSEARCH:a")?.vetting).toEqual({ verdict: "scam", note: "Asks for a fee", checkedBy: "n8n" });
+    expect(states.get("JSEARCH:b")).not.toHaveProperty("vetting");
+    expect(other.id).toBeTruthy();
   });
 
   it("reads a stored value that doesn't fit as no verdict", () => {
