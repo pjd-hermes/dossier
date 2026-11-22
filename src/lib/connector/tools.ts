@@ -46,6 +46,7 @@ import { appVersion } from "@/lib/version";
 
 import { connectorDraftJob } from "./draft";
 import { type ConnectorAccess, FULL_ACCESS, limitTools } from "./scopes";
+import { registerVettingTools } from "./vetting-tools";
 import { readPastedPosting } from "./handoff";
 import {
   reviseWrittenApplication,
@@ -635,6 +636,9 @@ export function createDossierServer(origin: string, access: ConnectorAccess = FU
       return text({ id, status: statusInfo(status).label, changed: result.outcome !== "unchanged" });
     },
   );
+
+  // Fork: the tools for checking what the job agent found (vetting-tools.ts).
+  registerVettingTools(server, { linkTo, access });
 
   return server;
 }

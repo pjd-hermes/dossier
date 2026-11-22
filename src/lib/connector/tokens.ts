@@ -20,7 +20,7 @@ export type TokenScope = "read" | "dismiss";
 export type TokenInfo = { id: string; name: string; scope: TokenScope; createdAt: string; lastUsedAt: string | null };
 
 const PREFIX = "dsr_";
-export const MAX_TOKENS = 10;
+const MAX_TOKENS = 10;
 const MAX_NAME = 60;
 /** A token's last use is written at most this often, so a busy workflow doesn't write on every request. */
 const TOUCH_MS = 60_000;

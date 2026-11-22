@@ -2,7 +2,7 @@ import "server-only";
 
 import { z } from "zod";
 
-import type { Prisma } from "@/generated/prisma/client";
+import type { Posting, Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 import { dismissPosting, foundFromPosting, unmarkPosting } from "./postings";
@@ -17,7 +17,7 @@ export type Verdict = (typeof VERDICTS)[number];
 
 export const checkSchema = z.object({ name: z.string().trim().min(1).max(80), result: z.string().max(300) });
 
-export const vettingSchema = z.object({
+const vettingSchema = z.object({
   verdict: z.enum(VERDICTS),
   note: z.string().max(1000),
   checks: z.array(checkSchema).max(20),
@@ -38,11 +38,11 @@ type Outcome<T> = ({ ok: true } & T) | { ok: false; message: string };
 const GONE = "That posting is no longer in Dossier.";
 
 /** The posting a call acts on, or why it can't: it's gone, or Dossier shows another one for the same job. */
-async function actionable(postingId: string) {
+async function actionable(postingId: string): Promise<{ row: Posting } | { message: string }> {
   const row = await prisma.posting.findUnique({ where: { id: postingId } });
-  if (!row || row.removedAt) return { message: GONE } as const;
-  if (row.mergedIntoId) return { message: `That posting is the same job as ${row.mergedIntoId}, which is the one Dossier shows. Use that posting_id.` } as const;
-  return { row } as const;
+  if (!row || row.removedAt) return { message: GONE };
+  if (row.mergedIntoId) return { message: `That posting is the same job as ${row.mergedIntoId}, which is the one Dossier shows. Use that posting_id.` };
+  return { row };
 }
 
 const vettingValue = (input: { verdict: Verdict; note: string; checks?: { name: string; result: string }[] }, checkedBy: string): Prisma.InputJsonValue => ({
@@ -59,7 +59,7 @@ export async function recordVetting(
   checkedBy: string,
 ): Promise<Outcome<unknown>> {
   const target = await actionable(postingId);
-  if ("message" in target) return { ok: false, message: target.message };
+  if (!("row" in target)) return { ok: false, message: target.message };
   await prisma.posting.update({ where: { id: target.row.id }, data: { vetting: vettingValue(input, checkedBy) } });
   return { ok: true };
 }
@@ -71,7 +71,7 @@ export async function dismissWithReason(
   checkedBy: string,
 ): Promise<Outcome<{ wasSaved: boolean }>> {
   const target = await actionable(postingId);
-  if ("message" in target) return { ok: false, message: target.message };
+  if (!("row" in target)) return { ok: false, message: target.message };
   if (target.row.dismissedAt) return { ok: false, message: "That posting is dismissed already." };
   await prisma.posting.update({ where: { id: target.row.id }, data: { vetting: vettingValue({ verdict: input.verdict ?? "scam", note: input.reason }, checkedBy) } });
   const { wasSaved } = await dismissPosting(foundFromPosting(target.row));

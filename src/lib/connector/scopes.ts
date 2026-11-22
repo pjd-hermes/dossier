@@ -17,7 +17,7 @@ export const FULL_ACCESS: ConnectorAccess = { scope: "full", name: "Claude" };
 /** The tools a "dismiss" token may use beyond the read-only ones. */
 const DISMISS_TOOLS: ReadonlySet<string> = new Set(["dismiss_posting", "restore_posting", "record_vetting"]);
 
-export function toolAllowed(access: ConnectorAccess, tool: { name: string; readOnly: boolean }): boolean {
+function toolAllowed(access: ConnectorAccess, tool: { name: string; readOnly: boolean }): boolean {
   if (access.scope === "full") return true;
   if (tool.readOnly) return true;
   return access.scope === "dismiss" && DISMISS_TOOLS.has(tool.name);

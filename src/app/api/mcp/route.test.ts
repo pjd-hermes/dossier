@@ -109,12 +109,17 @@ describe("the Claude connector at /api/mcp (#221)", () => {
     const { result } = await answer(await call({ jsonrpc: "2.0", id: 2, method: "tools/list" }, token));
     expect(result?.tools?.map((entry) => entry.name).sort()).toEqual([
       "check_draft",
+      "company_history",
+      "dismiss_posting",
       "draft_application",
       "get_application",
       "get_posting",
       "get_profile",
+      "list_agent_finds",
       "list_applications",
       "more_jobs",
+      "record_vetting",
+      "restore_posting",
       "save_application",
       "save_job_scores",
       "search_jobs",
@@ -124,7 +129,7 @@ describe("the Claude connector at /api/mcp (#221)", () => {
   });
 
   describe("with a named access token (fork)", () => {
-    const READ_ONLY = ["check_draft", "get_application", "get_posting", "get_profile", "list_applications"];
+    const READ_ONLY = ["check_draft", "company_history", "get_application", "get_posting", "get_profile", "list_agent_finds", "list_applications"];
 
     it("lets a read token look, and nothing that writes or spends a portal's searches", async () => {
       const { token } = await createToken({ name: "n8n", scope: "read" });
@@ -146,7 +151,7 @@ describe("the Claude connector at /api/mcp (#221)", () => {
     });
 
     it("keeps every tool for Claude's own sign-in", async () => {
-      expect((await toolNames(await accessToken()))!.length).toBe(12);
+      expect((await toolNames(await accessToken()))!.length).toBe(17);
     });
 
     it("stops at once when revoked, with the same 401 as any other unknown token", async () => {
