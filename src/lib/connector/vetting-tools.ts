@@ -88,7 +88,8 @@ export function registerVettingTools(server: McpServer, { linkTo, access }: { li
       title: "Dismiss a posting",
       description:
         "Dismisses a posting the user wouldn't want, such as a scam or a not-so-legitimate company: it stays out of Dossier's lists and later searches, and the job agent drops it from its queue. " +
-        "Give the reason, which is kept with the posting as its verdict (scam unless you say doubtful). restore_posting undoes it. Nothing is deleted.",
+        "Give the reason, which is kept with the posting as its verdict (scam unless you say doubtful). restore_posting undoes it. Nothing is deleted. " +
+        "A posting the user saved or applied for isn't dismissed: record a verdict instead.",
       inputSchema: z.object({
         posting_id: postingId,
         reason: z.string().trim().min(1).max(300).describe("Why, in a sentence"),

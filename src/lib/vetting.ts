@@ -51,6 +51,9 @@ export async function dismissWithReason(
   const target = await actionable(postingId);
   if (!("row" in target)) return { ok: false, message: target.message };
   if (target.row.dismissedAt) return { ok: false, message: "That posting is dismissed already." };
+  // What the user chose themselves isn't a tool's to undo: it can say what it found with record_vetting.
+  if (target.row.savedAt) return { ok: false, message: "The user saved that posting, so it isn't dismissed. Record a verdict with record_vetting instead." };
+  if (target.row.applicationId) return { ok: false, message: "An application was made from that posting, so it isn't dismissed. Record a verdict with record_vetting instead." };
   await prisma.posting.update({ where: { id: target.row.id }, data: { vetting: vettingValue({ verdict: input.verdict ?? "scam", note: input.reason }, checkedBy) } });
   const { wasSaved } = await dismissPosting(foundFromPosting(target.row));
   return { ok: true, wasSaved };

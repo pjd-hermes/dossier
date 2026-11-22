@@ -116,7 +116,7 @@ For n8n and other apps that can't sign in through OAuth, and for checking what t
   `dismiss_posting` and `restore_posting`. Claude's own sign-in keeps every tool.
 - **Tools:** `list_agent_finds` (what agent runs found, with `since` for what's new after a run), `company_history`,
   `record_vetting` (legit, doubtful or scam, with a note and checks), `dismiss_posting` (records why, then dismisses, as the
-  Dismiss button does) and `restore_posting` (Undo). They go through `postings.ts`, so there is one dismissal.
+  Dismiss button does; a posting the user saved or applied for is left alone) and `restore_posting` (Undo). They go through `postings.ts`, so there is one dismissal.
 - **Verdicts** are kept in `Posting.vetting` and shown in Positions (a tag, and a Checked line in the facts).
 - **n8n:** add an MCP Client node, endpoint `<your address>/api/mcp`, header `Authorization: Bearer dsr_...`. After each agent
   run: `list_agent_finds` with `since` and `only_unvetted`, check each posting (`get_posting`, `company_history`, web checks in

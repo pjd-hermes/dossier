@@ -88,6 +88,19 @@ describe("vetting what the job agent found (fork)", () => {
     expect(await prisma().posting.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({ vetting: first.vetting, dismissedAt: first.dismissedAt });
   });
 
+  it("leaves alone a posting the user saved or applied for, which can still get a verdict", async () => {
+    const saved = await make("saved", { savedAt: new Date() });
+    const application = await prisma().application.create({ data: { title: "Applied" } });
+    const applied = await make("applied", { applicationId: application.id });
+    expect(await dismissWithReason(saved.id, { reason: "x" }, "n8n")).toEqual({
+      ok: false,
+      message: "The user saved that posting, so it isn't dismissed. Record a verdict with record_vetting instead.",
+    });
+    expect(await dismissWithReason(applied.id, { reason: "x" }, "n8n")).toMatchObject({ ok: false, message: expect.stringContaining("An application was made") });
+    expect(await prisma().posting.findMany({ where: { dismissedAt: { not: null } } })).toEqual([]);
+    expect(await recordVetting(saved.id, { verdict: "doubtful", note: "Odd salary" }, "n8n")).toEqual({ ok: true });
+  });
+
   it("refuses a posting shown as another one, and one that's not there", async () => {
     const shown = await make("shown");
     const merged = await make("merged", { mergedIntoId: shown.id });
