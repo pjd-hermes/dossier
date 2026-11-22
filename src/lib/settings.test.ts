@@ -111,6 +111,8 @@ describe("stored settings", () => {
       usagePingChoiceText: null,
       connectorEnabledAt: null,
       connectorRedirects: [],
+      connectorTokens: [],
+      connectorTokenUse: {},
       browserTimeZone: null,
       lastOrigin: null,
       portalNotices: {},

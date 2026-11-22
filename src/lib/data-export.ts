@@ -67,6 +67,9 @@ export const INSTALL_SETTINGS: readonly string[] = [
   // An import must never open the MCP connector's addresses on this server (#221), or let another app sign in (#281).
   "connectorEnabledAt",
   "connectorRedirects",
+  // The fork's named access tokens (src/lib/connector/tokens.ts): only hashes are kept, and they belong to this server.
+  "connectorTokens",
+  "connectorTokenUse",
 ];
 
 const date = z.iso.datetime().transform((value) => new Date(value));
