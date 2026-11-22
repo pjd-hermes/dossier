@@ -62,7 +62,7 @@ export function ConnectorTokens({ initial }: { initial: TokenInfo[] }) {
       </div>
 
       {fresh && (
-        <div role="note" className="flex flex-col gap-2 rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
+        <div role="note" aria-label="New token" className="flex flex-col gap-2 rounded-card bg-warning-surface px-4 py-3 text-meta text-warning">
           <p>Copy this token now. It won&apos;t be shown again.</p>
           <div className="flex flex-wrap items-center gap-3">
             <code className="min-w-0 flex-1 font-mono text-[13px] [overflow-wrap:anywhere]">{fresh}</code>

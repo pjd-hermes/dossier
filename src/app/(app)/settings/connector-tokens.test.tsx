@@ -30,7 +30,7 @@ describe("Settings → MCP connector → Access tokens (fork)", () => {
     await user.click(screen.getByRole("button", { name: "Create token" }));
     expect(createConnectorToken).toHaveBeenCalledWith({ name: "n8n", scope: "dismiss" });
 
-    const note = screen.getByRole("note");
+    const note = screen.getByRole("note", { name: "New token" });
     expect(note).toHaveTextContent("dsr_secret-token-text");
     expect(note).toHaveTextContent("won't be shown again");
     await user.click(within(note).getByRole("button", { name: "Copy token" }));
@@ -62,7 +62,7 @@ describe("Settings → MCP connector → Access tokens (fork)", () => {
     expect(list).toHaveTextContent("Read and dismiss");
     expect(list).toHaveTextContent("2026-11-22");
     expect(list).toHaveTextContent("Never used");
-    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    expect(screen.queryByRole("note", { name: "New token" })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Revoke n8n" }));
     expect(revokeConnectorToken).toHaveBeenCalledWith({ id: "t1" });
@@ -75,6 +75,6 @@ describe("Settings → MCP connector → Access tokens (fork)", () => {
     render(<ConnectorTokens initial={[]} />);
     await user.type(screen.getByLabelText("Name"), "n8n{Enter}");
     expect(screen.getByLabelText("Name")).toHaveValue("n8n");
-    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    expect(screen.queryByRole("note", { name: "New token" })).not.toBeInTheDocument();
   });
 });
