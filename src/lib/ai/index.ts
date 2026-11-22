@@ -1,6 +1,7 @@
 import "server-only";
 
 import { AiProvider } from "@/generated/prisma/enums";
+import { recordUsage } from "@/lib/usage-data";
 
 import { loadAiConfig, type AiConfig } from "./config";
 import { AiError } from "./errors";
@@ -10,33 +11,34 @@ import { AnthropicProvider } from "./providers/anthropic";
 import { LocalProvider } from "./providers/local";
 import { LmStudioProvider } from "./providers/lmstudio";
 import { MistralProvider } from "./providers/mistral";
-import { OpenCodeGoProvider } from "./providers/opencode-go";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
 
 export { AiError } from "./errors";
-export type { AIProvider, ChatMessage, CompletionRequest, JsonCompletionRequest } from "./provider";
+export type { AIProvider,    } from "./provider";
 
-/** A provider for `config`. A saved key that can't be read stops hosted providers with a clear message. */
-export function createProvider(config: AiConfig, sessionId?: string): AIProvider {
+/**
+ * A provider for `config`, keeping each answer's tokens for the Usage screen.
+ * A saved key that can't be read stops hosted providers with a clear message.
+ */
+export function createProvider(config: AiConfig): AIProvider {
   const { provider, baseUrl, model, apiKey, apiKeyProblem, timeoutMs } = config;
   if (apiKeyProblem && providerOption(provider).apiKey) throw AiError.config(apiKeyProblem);
   switch (provider) {
     case AiProvider.LOCAL:
-      return new LocalProvider(baseUrl, model, timeoutMs);
+      return new LocalProvider(baseUrl, model, timeoutMs, recordUsage);
     case AiProvider.OPENAI:
-      return new OpenAICompatibleProvider("OPENAI", baseUrl, apiKey, model, timeoutMs);
-    case AiProvider.OPENCODE_GO:
-      return new OpenCodeGoProvider(baseUrl, apiKey, model, timeoutMs, sessionId);
+    case AiProvider.OPENCODE_GO: // Fork (FORK.md): retired, same as OpenAI-compatible.
+      return new OpenAICompatibleProvider("OPENAI", baseUrl, apiKey, model, timeoutMs, recordUsage);
     case AiProvider.ANTHROPIC:
-      return new AnthropicProvider(baseUrl, apiKey, model, timeoutMs);
+      return new AnthropicProvider(baseUrl, apiKey, model, timeoutMs, recordUsage);
     case AiProvider.MISTRAL:
-      return new MistralProvider(baseUrl, apiKey, model, timeoutMs);
+      return new MistralProvider(baseUrl, apiKey, model, timeoutMs, recordUsage);
     case AiProvider.LMSTUDIO:
-      return new LmStudioProvider(baseUrl, apiKey, model, timeoutMs);
+      return new LmStudioProvider(baseUrl, apiKey, model, timeoutMs, recordUsage);
   }
 }
 
 /** The provider configured in Settings, or by the DOSSIER_AI_* variables. */
-export async function getAiProvider(sessionId?: string): Promise<AIProvider> {
-  return createProvider(await loadAiConfig(), sessionId);
+export async function getAiProvider(): Promise<AIProvider> {
+  return createProvider(await loadAiConfig());
 }

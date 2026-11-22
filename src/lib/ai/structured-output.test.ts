@@ -6,14 +6,13 @@ import { extractJson, validateJson, type AIProvider } from "./provider";
 import { AnthropicProvider } from "./providers/anthropic";
 import { MockProvider } from "./providers/mock";
 import { OllamaProvider } from "./providers/ollama";
-import { OpenCodeGoProvider } from "./providers/opencode-go";
 import { OpenAICompatibleProvider } from "./providers/openai-compatible";
 import { json, stubFetch, type FakeRequest } from "./test-http";
 
 afterEach(() => vi.unstubAllGlobals());
 
 const Posting = z.object({ company: z.string(), years: z.number() });
-const ask = { system: "Extract.", messages: [{ role: "user" as const, content: "Ledgerly wants 5 years." }], schema: Posting };
+const ask = { task: "extract-posting" as const, system: "Extract.", messages: [{ role: "user" as const, content: "Ledgerly wants 5 years." }], schema: Posting };
 
 describe("extractJson", () => {
   it("reads plain JSON", () => {
@@ -74,13 +73,6 @@ const harnesses: Harness[] = [
     conversation: (request) => (request.body as { messages: unknown[] }).messages,
   },
   {
-    name: "OpenCode Go",
-    make: () => new OpenCodeGoProvider("https://opencode.ai/inference/go", "oc_sk", "glm-5.3-flash", 60_000),
-    respond: (content, cutOff) =>
-      json({ id: "c", object: "chat.completion", created: 0, model: "glm-5.3-flash", choices: [{ index: 0, message: { role: "assistant", content }, finish_reason: cutOff ? "length" : "stop" }] }),
-    conversation: (request) => (request.body as { messages: unknown[] }).messages,
-  },
-  {
     name: "Anthropic",
     make: () => new AnthropicProvider("https://api.anthropic.com", "sk-ant", "claude-sonnet-5", 60_000),
     respond: (content, cutOff) =>
@@ -137,6 +129,20 @@ describe.each(harnesses)("$name: structured output", ({ make, respond, conversat
   });
 });
 
+describe("NUL characters, which PostgreSQL can't save (public issue 127)", () => {
+  it("are left out of a text answer", async () => {
+    const provider = new MockProvider({ reply: () => "Dear\u0000 team" });
+    expect(await provider.complete({ task: ask.task, system: ask.system, messages: ask.messages })).toBe("Dear team");
+  });
+
+  it("are left out of a JSON answer, escaped or not, before the schema checks it", async () => {
+    const provider = new MockProvider({ reply: () => '{"company": "Ledger\\u0000ly\u0000", "years": 5}' });
+    expect(await provider.complete(ask)).toEqual({ company: "Ledgerly", years: 5 });
+    // A literal backslash-u-0-0-0-0 is text, not a NUL, and stays.
+    expect(validateJson('{"company": "a\\\\u0000b", "years": 1}', Posting)).toEqual({ ok: true, data: { company: "a\\u0000b", years: 1 } });
+  });
+});
+
 describe("MockProvider: structured output", () => {
   it("retries like the others", async () => {
     let turn = 0;
@@ -187,6 +193,34 @@ describe("OpenAI-compatible servers without JSON schemas", () => {
     const provider = new OpenAICompatibleProvider("OPENAI", "https://gateway.example/api/v1", "sk", "busy", 60_000);
     expect(await provider.complete(ask).catch((reason: unknown) => reason)).toBeInstanceOf(AiError);
     expect(requests).toHaveLength(1);
+  });
+
+  /** Groq's answer when its own check of the model's JSON fails (public issue 128). */
+  const groqFailed = () =>
+    json(
+      { error: { message: "Failed to generate JSON. Please adjust your prompt. See 'failed_generation' for more details.", type: "invalid_request_error", code: "json_validate_failed", failed_generation: "" } },
+      { status: 400 },
+    );
+  const formats = (requests: FakeRequest[]) => requests.map((request) => (request.body as { response_format?: { type: string } }).response_format?.type);
+
+  it("ask the next simpler way after a 400 they don't explain, for that call only", async () => {
+    const requests = stubFetch(({ body }) => ((body as { response_format?: unknown }).response_format ? groqFailed() : answer('{"company": "Ledgerly", "years": 5}')));
+    const provider = new OpenAICompatibleProvider("OPENAI", "https://groq.example/openai/v1", "gsk", "openai/gpt-oss-120b", 60_000);
+    expect(await provider.complete(ask)).toEqual({ company: "Ledgerly", years: 5 });
+    expect(formats(requests)).toEqual(["json_schema", "json_object", undefined]);
+    // Not remembered, since the same error can come from something else.
+    await provider.complete(ask);
+    expect(formats(requests).slice(3)).toEqual(["json_schema", "json_object", undefined]);
+  });
+
+  it("give up after the simplest way, with the server's status and error type for the log", async () => {
+    const requests = stubFetch(groqFailed);
+    const provider = new OpenAICompatibleProvider("OPENAI", "https://groq-down.example/openai/v1", "gsk", "openai/gpt-oss-20b", 60_000);
+    const error = (await provider.complete(ask).catch((reason: unknown) => reason)) as AiError;
+    expect(error.kind).toBe("provider");
+    expect(error.detail).toMatch(/400 invalid_request_error json_validate_failed$/);
+    expect(error.detail).not.toContain("Failed to generate");
+    expect(requests).toHaveLength(3);
   });
 
   it("put a schema refused as too complex in the prompt, and only that schema", async () => {

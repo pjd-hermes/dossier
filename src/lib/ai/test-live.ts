@@ -9,7 +9,7 @@ import type { AiConfig } from "./config";
  * What's saved in Settings → AI provider, key included, read the way the app
  * reads it: `.env` (DOSSIER_SECRET decrypts the key), then the database.
  */
-export async function savedAiConfig(): Promise<AiConfig> {
+async function savedAiConfig(): Promise<AiConfig> {
   // Keeps what's set already, such as the DATABASE_URL Compose gives the container.
   process.loadEnvFile(".env");
   const { loadAiConfig } = await import("./config");
@@ -26,20 +26,10 @@ export async function liveAnthropic(): Promise<{ key: string; model: string } | 
 
 /** Mistral's key and model: DOSSIER_AI_KEY (and DOSSIER_AI_MODEL), or what's saved in Settings with Mistral chosen. */
 export async function liveMistral(): Promise<{ key: string; model: string } | null> {
-  const fallbackModel = "mistral-medium-latest";
+  const fallbackModel = "mistral-small-2603";
   if (process.env.DOSSIER_AI_KEY) return { key: process.env.DOSSIER_AI_KEY, model: process.env.DOSSIER_AI_MODEL ?? fallbackModel };
   const saved = await savedAiConfig();
   return saved.provider === AiProvider.MISTRAL && saved.apiKey ? { key: saved.apiKey, model: saved.model ?? fallbackModel } : null;
-}
-
-/** OpenCode Go's key and model: OPENCODE_TEST_KEY (and OPENCODE_TEST_MODEL), or what's saved in Settings with OpenCode Go chosen. */
-export async function liveOpenCodeGo(): Promise<{ key: string; model: string } | null> {
-  const fallbackModel = "glm-5.3-flash";
-  if (process.env.OPENCODE_TEST_KEY) {
-    return { key: process.env.OPENCODE_TEST_KEY, model: process.env.OPENCODE_TEST_MODEL ?? fallbackModel };
-  }
-  const saved = await savedAiConfig();
-  return saved.provider === AiProvider.OPENCODE_GO && saved.apiKey ? { key: saved.apiKey, model: saved.model ?? fallbackModel } : null;
 }
 
 /** LM Studio's address, token and model: DOSSIER_AI_MODEL (and DOSSIER_AI_URL, DOSSIER_AI_KEY), or what's saved in Settings with LM Studio chosen. */

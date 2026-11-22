@@ -61,22 +61,6 @@ export const PROVIDER_OPTIONS: readonly {
     apiKey: { label: "API key" },
   },
   {
-    value: AiProvider.OPENCODE_GO,
-    name: "OpenCode Go",
-    vendor: "OpenCode",
-    description: "Open coding models through an OpenCode Go subscription.",
-    tag: "Hosted · Go subscription",
-    local: false,
-    defaultUrl: "https://opencode.ai/inference/go",
-    urlPlaceholder: "https://opencode.ai/inference/go",
-    urlHint: "The Go base URL from OpenCode's docs. Dossier adds the OpenAI-compatible path for chat.",
-    defaultModel: "glm-5.3-flash",
-    apiKey: {
-      label: "OpenCode API key",
-      hint: "From the OpenCode Console. The same key works with OpenCode Zen, but Go models need a Go or Go Plus plan.",
-    },
-  },
-  {
     value: AiProvider.ANTHROPIC,
     name: "Anthropic",
     vendor: "Anthropic",
@@ -85,7 +69,7 @@ export const PROVIDER_OPTIONS: readonly {
     local: false,
     defaultUrl: "https://api.anthropic.com",
     urlPlaceholder: "https://api.anthropic.com",
-    defaultModel: "claude-sonnet-5",
+    defaultModel: "claude-sonnet-5-5",
     apiKey: { label: "API key" },
   },
   {
@@ -93,18 +77,34 @@ export const PROVIDER_OPTIONS: readonly {
     name: "Mistral",
     vendor: "Mistral",
     description: "Mistral's models through your own API key.",
-    tag: "Hosted · free tier to start",
+    tag: "Hosted · pay per use",
     local: false,
     defaultUrl: "https://api.mistral.ai/v1",
     urlPlaceholder: "https://api.mistral.ai/v1",
-    defaultModel: "mistral-medium-latest",
+    defaultModel: "mistral-small-2603",
     apiKey: { label: "API key" },
   },
 ];
 
 export function providerOption(provider: AiProvider) {
-  return PROVIDER_OPTIONS.find((option) => option.value === provider)!;
+  // Fork (FORK.md): the retired OPENCODE_GO is shown as OpenAI-compatible.
+  const shown = provider === AiProvider.OPENCODE_GO ? AiProvider.OPENAI : provider;
+  return PROVIDER_OPTIONS.find((option) => option.value === shown)!;
 }
+
+/** What one AI request may take, in seconds, unless Settings or DOSSIER_AI_TIMEOUT_SECONDS says otherwise. */
+export const DEFAULT_TIMEOUT_SECONDS = {
+  // Generous: a local model on a laptop can take minutes for a cover letter, and loading one a while too.
+  local: 300,
+  hosted: 120,
+} as const;
+
+/** The timeout Settings → AI provider takes (public issue 118): from 5 seconds to an hour. */
+export const AI_TIMEOUT_LIMITS = { min: 5, max: 3_600 } as const;
+
+/** The provider's own timeout, in seconds. */
+export const defaultTimeoutSeconds = (provider: AiProvider): number =>
+  providerOption(provider).local ? DEFAULT_TIMEOUT_SECONDS.local : DEFAULT_TIMEOUT_SECONDS.hosted;
 
 /** What people see when a saved key can't be decrypted, e.g. after DOSSIER_SECRET changed. */
 export const API_KEY_UNREADABLE = "Your saved API key can't be read. Please enter it again.";
@@ -118,4 +118,12 @@ export type AiSettingsView = {
   baseUrl: string;
   model: string;
   keyState: KeyState;
+  /** The saved key's last four characters (ST4), or null. */
+  keyEnding: string | null;
+  /** The last connection test of what's chosen (E34-1), or null. */
+  test: { at: string; ok: boolean; seconds: number | null; error: string | null } | null;
+  /** Saved in Settings; null for DOSSIER_AI_TIMEOUT_SECONDS's, or the provider's own. */
+  timeoutSeconds: number | null;
+  /** DOSSIER_AI_TIMEOUT_SECONDS, if it's set. */
+  envTimeoutSeconds: number | null;
 };
