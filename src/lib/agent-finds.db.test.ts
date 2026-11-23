@@ -55,6 +55,17 @@ describe("what the job agent found (fork)", () => {
     expect("finds" in result && result.finds.map((entry) => entry.title)).toEqual(["Job new", "Job old"]);
   });
 
+  it("says which finds already have an application, so a workflow doesn't draft them again", async () => {
+    const application = await prisma().application.create({ data: { title: "Applied" } });
+    await find("applied", { minutes: 2, posting: { applicationId: application.id } });
+    await find("open", { minutes: 1 });
+    const result = await listAgentFinds({});
+    expect("finds" in result && result.finds.map((entry) => [entry.title, entry.applicationId])).toEqual([
+      ["Job applied", application.id],
+      ["Job open", null],
+    ]);
+  });
+
   it("leaves out dismissed, removed and merged postings", async () => {
     const shown = await find("shown", { minutes: 1 });
     await find("dismissed", { posting: { dismissedAt: at(2) } });

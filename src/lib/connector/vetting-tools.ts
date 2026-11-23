@@ -25,7 +25,7 @@ export function registerVettingTools(server: McpServer, { linkTo, access }: { li
     {
       title: "List what the job agent found",
       description:
-        "Postings the job agent's runs found, newest first, without those the user or a tool dismissed. Each has the company, salary, link, which portals found it, what the agent's scoring flagged (redFlags, requirements covered) and any verdict already recorded. " +
+        "Postings the job agent's runs found, newest first, without those the user or a tool dismissed. Each has the company, salary, link, which portals found it, what the agent's scoring flagged (redFlags, requirements covered), any verdict already recorded (with its source: direct, recruiter or unknown) and the applicationId when an application already exists for it. " +
         "Use since to read only what's new after a run, and only_unvetted to skip what already has a verdict. Read the whole text of one with get_posting (posting_id), then record_vetting or dismiss_posting.",
       inputSchema: z.object({
         since: z.string().max(40).optional().describe("Only postings a search found at or after this time, e.g. 2026-11-22T06:00:00Z"),

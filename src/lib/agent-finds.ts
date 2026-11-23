@@ -32,6 +32,8 @@ export type AgentFind = {
   /** The agent search that found it last, by the name it had. */
   agentSearch: string | null;
   vetting: Vetting | null;
+  /** The application made from it, when there is one: a workflow that drafts leaves these alone. */
+  applicationId: string | null;
   redFlags: string[];
   covered: number;
   requirements: number;
@@ -114,6 +116,7 @@ export async function listAgentFinds(options: {
       foundAt: row.lastFoundAt.toISOString(),
       agentSearch: row.finds[0]?.search.agentSearchName ?? null,
       vetting: vettingOf(row.vetting),
+      applicationId: row.applicationId,
       redFlags: candidate ? stringsOf(candidate.redFlags) : [],
       covered: candidate?.covered ?? 0,
       requirements: candidate?.requirements ?? 0,
