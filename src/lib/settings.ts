@@ -80,6 +80,16 @@ export const json = <T extends z.ZodType>(schema: T) =>
     })
     .pipe(schema);
 
+/** A named access token for the MCP endpoint (fork): only its hash is kept. */
+export const connectorTokenSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  scope: z.enum(["read", "dismiss"]),
+  hash: z.string(),
+  createdAt: z.string(),
+});
+const connectorTokensSchema = z.array(connectorTokenSchema);
+
 /** A list stored as a JSON array of strings. */
 const stringList = json(z.array(z.string()));
 
@@ -310,6 +320,10 @@ const settingsSchema = z.object({
   connectorEnabledAt: z.iso.datetime().nullable().catch(null),
   /** Other MCP apps' callback addresses, allowed like Claude's (#281). The install's too: an import must never add one. */
   connectorRedirects: stringList.catch([]),
+  /** Fork: named access tokens for the MCP endpoint (src/lib/connector/tokens.ts), kept hashed. The install's: never exported, and an import must never add one. */
+  connectorTokens: json(connectorTokensSchema).catch([]),
+  /** When each token was last used, by its id: apart from the tokens, so a use can never write a revoked one back. */
+  connectorTokenUse: json(z.record(z.string(), z.string())).catch({}),
   // The browser's time zone as it last told the server, for work done
   // without a request, such as the inbox check (time-zone.ts). It belongs
   // to the install, not its data, so exports leave it out (INSTALL_SETTINGS).

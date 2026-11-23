@@ -33,6 +33,7 @@ import {
   testScoringModel,
   updateSettings,
 } from "./actions";
+import { createConnectorToken, revokeConnectorToken } from "./connector-token-actions";
 
 // The actions run against the test database, signed in.
 const db = vi.hoisted(() => ({ client: undefined as ReturnType<typeof createTestClient> | undefined }));
@@ -371,5 +372,19 @@ describe("the MCP connector (#221, #281)", () => {
     expect(await addConnectorRedirect({ uri: "http://localhost:5678/callback" })).toMatchObject({ ok: true, data: { redirects: [n8n, "http://localhost:5678/callback"] } });
     expect((await settings()).connectorRedirects).toEqual([n8n, "http://localhost:5678/callback"]);
     expect(await removeConnectorRedirect({ uri: n8n })).toEqual({ ok: true, data: { redirects: ["http://localhost:5678/callback"] } });
+  });
+});
+
+describe("the MCP connector's access tokens (fork)", () => {
+  it("makes a token while the connector is on, shows it once, and revokes it", async () => {
+    expect(await createConnectorToken({ name: "n8n", scope: "read" })).toEqual({ ok: false, error: "The MCP connector is off. Turn it on first." });
+    await setConnector({ on: true });
+    const made = await createConnectorToken({ name: "n8n", scope: "dismiss" });
+    if (!made.ok) throw new Error(made.error);
+    expect(made.data.token).toMatch(/^dsr_/);
+    expect(made.data.tokens).toEqual([expect.objectContaining({ name: "n8n", scope: "dismiss", lastUsedAt: null })]);
+    expect(JSON.stringify(await settings())).not.toContain(made.data.token);
+    expect(await createConnectorToken({ name: "N8N", scope: "read" })).toEqual({ ok: false, error: "There's a token with that name already." });
+    expect(await revokeConnectorToken({ id: made.data.tokens[0]!.id })).toEqual({ ok: true, data: { tokens: [] } });
   });
 });

@@ -877,6 +877,8 @@ model Posting {
   movedBackAt   DateTime?
   /// Removed from the Archive: trimmed like a dismissed one, shown nowhere, and no search brings it back.
   removedAt     DateTime?
+  /// What was found out about whether it's a real posting (fork, src/lib/vetting.ts): verdict, note, checks, who checked and when. Null while nobody has looked.
+  vetting       Json?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
 

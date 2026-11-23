@@ -6,6 +6,7 @@ import { bestFit, linkKey, postingKey, type FoundPosting, type PostingState, typ
 import { stringsOf } from "@/lib/agent/candidates";
 import { lockAgentSearches } from "@/lib/agent/searches";
 import { prisma } from "@/lib/prisma";
+import { vettingOf } from "@/lib/vetting-shape";
 
 // Postings in the positions library (E22-5): every posting a search found,
 // and what the user did with it (E14-5): saved, dismissed, or started an
@@ -109,6 +110,12 @@ export async function unmarkPosting(ref: PostingRef, mark: "saved" | "dismissed"
   });
 }
 
+/** What Positions shows of a posting's verdict (fork): the verdict, its note and who checked, not the checks. Nothing at all without one, so a state reads as upstream's. */
+const vettingState = (value: Prisma.JsonValue | undefined): Pick<PostingState, "vetting"> | Record<string, never> => {
+  const vetting = vettingOf(value);
+  return vetting ? { vetting: { verdict: vetting.verdict, note: vetting.note, checkedBy: vetting.checkedBy } } : {};
+};
+
 /** Where a posting stands with the job agent, from its candidate row. */
 const agentOf = (candidate: { id: string; status: string; applicationId: string | null } | undefined): PostingState["agent"] =>
   candidate ? { candidateId: candidate.id, status: candidate.status as NonNullable<PostingState["agent"]>["status"], applicationId: candidate.applicationId } : null;
@@ -134,6 +141,7 @@ export async function postingStates(found: readonly (PostingRef & { url: string 
         seenAt: true,
         archivedAt: true,
         lastFoundAt: true,
+        vetting: true,
         merged: { select: { source: true, url: true }, orderBy: { createdAt: "asc" } },
         // The job agent's searches that found it (E22-8).
         finds: { where: { search: { agentSearchName: { not: null } } }, select: { search: { select: { agentSearchName: true } } }, orderBy: { foundAt: "asc" } },
@@ -188,6 +196,7 @@ export async function postingStates(found: readonly (PostingRef & { url: string 
           stillListedAt: row?.archivedAt && row.lastFoundAt > row.archivedAt ? row.lastFoundAt.toISOString() : null,
           agentSearches: [...new Set((row?.finds ?? []).map((find) => find.search.agentSearchName ?? ""))],
           agent: agentOf(candidateOf.get(postingKey(posting))),
+          ...vettingState(row?.vetting),
         },
       ];
     }),

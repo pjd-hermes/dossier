@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { daysBetween, formatShortCalendarDate } from "@/lib/dates";
 import type { PostingFit } from "@/lib/fit";
+import type { PostingVetting } from "@/lib/vetting-shape";
 import { byBestFit, COVERS, coverageOf, type Covers } from "@/lib/posting-coverage";
 
 import { countryCodeFor } from "./countries";
@@ -173,6 +174,8 @@ export type PostingState = {
   agentSearches: string[];
   /** Where it stands with the job agent, when the agent scored it: Prepare draft, or its draft. */
   agent: { candidateId: string; status: "SCORED" | "DRAFTING" | "DRAFTED" | "APPROVED" | "DISMISSED"; applicationId: string | null } | null;
+  /** Fork: what was found out about whether it's a real posting (vetting-shape.ts), when someone has looked. */
+  vetting?: PostingVetting | null;
 };
 
 /** A posting as Find jobs shows it. */

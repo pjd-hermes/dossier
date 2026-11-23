@@ -612,6 +612,17 @@ describe("the Archive (E22-7)", () => {
     expect(screen.getByRole("link", { name: "Change the days" })).toHaveAttribute("href", "/settings?section=jobs");
   });
 
+  it("shows what the agent's checks found out about a posting, as a tag and in its facts (fork)", async () => {
+    const vetted = (id: string, verdict: "legit" | "doubtful" | "scam", note: string) =>
+      archived(id, { vetting: { verdict, note, checkedBy: "n8n" } });
+    renderScreen(inArchive([vetted("a", "scam", "Asks for a fee"), vetted("b", "doubtful", ""), vetted("c", "legit", "Real company"), archived("d")]));
+    expect(screen.getByRole("button", { name: /^Designer a/ })).toHaveTextContent("Scam");
+    expect(screen.getByRole("button", { name: /^Designer b/ })).toHaveTextContent("Doubtful");
+    expect(screen.getByRole("button", { name: /^Designer c/ })).toHaveTextContent("Checked");
+    expect(screen.getByRole("button", { name: /^Designer d/ })).not.toHaveTextContent(/Scam|Doubtful|Checked/);
+    expect(screen.getByText("Marked as a scam · Asks for a fee (n8n)")).toBeInTheDocument();
+  });
+
   it("marks one a search found again as still listed, and nothing as new", () => {
     renderScreen(inArchive([archived("a", { stillListedAt: "2026-10-03T08:00:00.000Z" }), archived("b")]));
     expect(screen.getByRole("button", { name: /^Designer a/ })).toHaveTextContent("Still listed · Today");

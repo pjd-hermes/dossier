@@ -14,6 +14,7 @@ vi.mock("./actions", () => ({
   addConnectorRedirect: vi.fn(async ({ uri }: { uri: string }) => ({ ok: true, data: { redirects: [uri] } })),
   removeConnectorRedirect: vi.fn(async () => ({ ok: true, data: { redirects: [] } })),
 }));
+vi.mock("./connector-token-actions", () => ({ createConnectorToken: vi.fn(), revokeConnectorToken: vi.fn() }));
 vi.mock("@/components/toast", () => ({ toast: vi.fn(), toastResult: (result: unknown) => result }));
 vi.mock("@/lib/copy-text", () => ({ copyText: vi.fn(async () => true) }));
 
@@ -69,6 +70,14 @@ describe("Settings → MCP connector (#221, #281)", () => {
     await user.click(screen.getByRole("button", { name: `Remove ${n8n}` }));
     expect(removeConnectorRedirect).toHaveBeenCalledWith({ uri: n8n });
     expect(screen.queryByRole("list", { name: "Apps' callback addresses" })).not.toBeInTheDocument();
+  });
+
+  it("shows the access tokens only while the connector is on", async () => {
+    const user = userEvent.setup();
+    render(<ConnectorSection initial={{ on: false, redirects: [], tokens: [{ id: "t1", name: "n8n", scope: "read", createdAt: "2026-11-22T12:00:00.000Z", lastUsedAt: null }] }} address={ADDRESS} />);
+    expect(screen.queryByRole("heading", { name: "Access tokens" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("switch", { name: "Let apps connect" }));
+    expect(screen.getByRole("list", { name: "Access tokens" })).toHaveTextContent("n8n");
   });
 
   it("disconnects every app", async () => {

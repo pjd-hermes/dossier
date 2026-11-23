@@ -265,6 +265,8 @@ export async function importExport(db: PrismaClient, data: DossierExport): Promi
           lastFoundAt: posting.lastFoundAt ?? posting.createdAt,
           seenAt: posting.seenAt === undefined ? posting.updatedAt : posting.seenAt,
           mergedIntoId: null,
+          // Fork addition: Prisma wants a JSON null spelled out, so an absent verdict is left out.
+          vetting: posting.vetting == null ? undefined : (posting.vetting as Prisma.InputJsonValue),
         })),
       });
       // The same job on another portal (E22-6), once every posting is there to point to.

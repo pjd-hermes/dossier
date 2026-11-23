@@ -21,6 +21,7 @@ import { isBoardLink } from "@/lib/dedupe";
 import type { JobView } from "@/lib/jobs/runner";
 import { postedAgo, postingKey, type FoundPosting, type LibraryFilters, type PostingState, type ProfileFit, type ShownPosting } from "@/lib/job-search/search";
 import { portalNames, postingPage, sourceInfo } from "@/lib/job-search/sources";
+import { vettingBadge, vettingFact } from "@/lib/vetting-shape";
 
 import {
   dismissFoundPosting,
@@ -492,6 +493,8 @@ function StateBadges({ state, now }: { state: PostingState; now: Date }) {
     state.applicationId && "Applied",
     state.saved && "Saved",
     state.dismissed && "Dismissed",
+    // Fork: what the agent's checks found out (vetting-shape.ts).
+    vettingBadge(state.vetting),
   ].filter(Boolean) as string[];
   if (badges.length === 0) return null;
   return (
@@ -580,6 +583,7 @@ function PostingDetail({
     { label: "Salary", value: posting.salary },
     { label: "Via", value: posting.via },
     { label: "Also on", value: state.foundOn.length > 1 ? portalNames(state.foundOn.slice(1).map((entry) => entry.portal)) : "" },
+    { label: "Checked", value: vettingFact(state.vetting) },
   ].filter((fact) => fact.value);
   const scoreButton = (
     <ScoreMenu profiles={profiles} disabled={Boolean(scoring)} onScore={onScore}>

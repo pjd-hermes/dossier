@@ -42,7 +42,7 @@ release the fork is merged up to, then the fork's own semver. A `-` is used beca
    a draft that `desktop.yml` publishes once the desktop downloads are attached; here that never runs, so the release is
    published at once.
 
-Fork versions: `0.1.0` is the first release (upstream 1.11.0 merged, plus saved searches and multi-provider job search). The next one, `0.2.0`, is the release that has upstream 1.15.1 merged: the fork's saved searches, multi-provider job search and OpenCode Go are gone, replaced by upstream's, and a migration moves PJ's data (below).
+Fork versions: `0.1.0` is the first release (upstream 1.11.0 merged, plus saved searches and multi-provider job search). The next one, `0.2.0`, is the release that has upstream 1.15.1 merged: the fork's saved searches, multi-provider job search and OpenCode Go are gone, replaced by upstream's, and a migration moves PJ's data (below). The next one, `0.3.0`, adds access tokens for the MCP endpoint and the tools for checking what the job agent finds (below).
 
 ## Rules
 
@@ -60,6 +60,13 @@ Fork versions: `0.1.0` is the first release (upstream 1.11.0 merged, plus saved 
 | `.github/workflows/desktop.yml` | The desktop app's downloads are built upstream only | 1.15.1 sync |
 | `src/lib/ai/config.ts`, `src/lib/ai/index.ts`, `src/lib/ai/provider-options.ts` | A stray `OPENCODE_GO` (from an export made before the sync) reads as OpenAI-compatible at OpenCode Go's address, because the enum still has the value and these are exhaustive over it | 1.15.1 sync |
 | `prisma/schema.prisma`, `prisma/sqlite/schema.prisma` | `OPENCODE_GO` stays in the `AiProvider` enum so a database that had it stays valid. Nothing writes it. The SQLite file is derived (`yarn sqlite-schema`) | 1.15.1 sync |
+| `prisma/schema.prisma`, `prisma/sqlite/schema.prisma` | `Posting.vetting`: what was found out about whether a posting is real (see "Access tokens and vetting" below) | Tokens and vetting |
+| `src/app/api/mcp/route.ts` | Tries a named access token before OAuth, and passes its name and scope on | Tokens and vetting |
+| `src/lib/connector/tools.ts` | Two thin calls: `limitTools` (what a token may use) and `registerVettingTools` (the five new tools) | Tokens and vetting |
+| `src/lib/settings.ts`, `src/lib/data-export.ts`, `src/lib/data-import.ts` | `connectorTokens` and `connectorTokenUse` settings (kept out of exports); `vetting` carried through export and import, without a format version bump so upstream's numbering stays its own | Tokens and vetting |
+| `src/lib/job-search/search.ts`, `src/lib/postings.ts` | `PostingState.vetting`, there only when a verdict exists, so a state reads as upstream's without one | Tokens and vetting |
+| `src/app/(app)/settings/page.tsx`, `connector-section.tsx` | One call each: the access tokens card inside Settings → MCP connector | Tokens and vetting |
+| `src/app/(app)/jobs/posting-results.tsx` | A tag and a "Checked" fact for a posting's verdict | Tokens and vetting |
 
 ## Files only this fork has
 
@@ -71,6 +78,10 @@ Fork versions: `0.1.0` is the first release (upstream 1.11.0 merged, plus saved 
 | `src/lib/fork-sync-migration.db.test.ts` | Tests that migration, on whichever database the tests run on |
 | `src/lib/ai/retired-provider.test.ts` | Tests that a stray `OPENCODE_GO` still works |
 | `src/dependency-floor.test.ts` | Fails if the installed `next` or `sharp` is older than the floors set by their advisories |
+| `prisma/migrations/20261201090000_posting_vetting`, `prisma/sqlite/migrations/20261201090000_posting_vetting` | `Posting.vetting` (JSON, nullable) |
+| `src/lib/connector/tokens.ts`, `scopes.ts`, `vetting-tools.ts` (and their tests) | Named access tokens, which tools a token may use, and the five tools |
+| `src/lib/vetting.ts`, `vetting-shape.ts`, `agent-finds.ts` (and their tests) | Record a verdict, dismiss with a reason, restore; the verdict's shape and wording; what the agent's runs found and a company's history |
+| `src/app/(app)/settings/connector-token-actions.ts`, `connector-tokens.tsx` (and tests) | The access tokens card in Settings → MCP connector |
 
 ## The 1.15.1 sync migration
 
@@ -93,6 +104,23 @@ code for all of it, and `20261126090000_fork_upstream_sync` moves PJ's data firs
   (`jsearchKeyEnc`, `adzunaKeyEnc`, `adzunaAppId`) and the one source (`jobSource`) into its portals by itself, so nothing is
   lost there; of the providers that were on together the first becomes `jobSource` (when none was chosen), and the others
   are switched on again in Settings -> Job search.
+
+## Access tokens and vetting
+
+For n8n and other apps that can't sign in through OAuth, and for checking what the job agent finds
+(plan: `.project/plans/2026-11-22-mcp-token-and-agent-finds.md`).
+
+- **Tokens:** Settings → MCP connector → Access tokens. A name and a scope (`read`, or `dismiss`), shown once, kept as a
+  SHA-256 hash in the `connectorTokens` setting, revoked one by one. They work while the connector is on; "Disconnect all
+  apps" doesn't revoke them (it's for OAuth apps). `read` sees only the tools that look; `dismiss` also `record_vetting`,
+  `dismiss_posting` and `restore_posting`. Claude's own sign-in keeps every tool.
+- **Tools:** `list_agent_finds` (what agent runs found, with `since` for what's new after a run), `company_history`,
+  `record_vetting` (legit, doubtful or scam, with a note and checks), `dismiss_posting` (records why, then dismisses, as the
+  Dismiss button does; a posting the user saved or applied for is left alone) and `restore_posting` (Undo). They go through `postings.ts`, so there is one dismissal.
+- **Verdicts** are kept in `Posting.vetting` and shown in Positions (a tag, and a Checked line in the facts).
+- **n8n:** add an MCP Client node, endpoint `<your address>/api/mcp`, header `Authorization: Bearer dsr_...`. After each agent
+  run: `list_agent_finds` with `since` and `only_unvetted`, check each posting (`get_posting`, `company_history`, web checks in
+  n8n), `record_vetting` for each, and `dismiss_posting` for the scams.
 
 ## Kept on purpose
 

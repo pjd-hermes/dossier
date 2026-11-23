@@ -67,6 +67,9 @@ export const INSTALL_SETTINGS: readonly string[] = [
   // An import must never open the MCP connector's addresses on this server (#221), or let another app sign in (#281).
   "connectorEnabledAt",
   "connectorRedirects",
+  // The fork's named access tokens (src/lib/connector/tokens.ts): only hashes are kept, and they belong to this server.
+  "connectorTokens",
+  "connectorTokenUse",
 ];
 
 const date = z.iso.datetime().transform((value) => new Date(value));
@@ -439,6 +442,8 @@ const posting = z.object({
   archivedAt: optionalDate.optional(),
   movedBackAt: optionalDate.optional(),
   removedAt: optionalDate.optional(),
+  /** Fork addition (src/lib/vetting.ts), without a version bump so upstream's numbering stays its own: older files lack it, and upstream's importer ignores it. */
+  vetting: z.unknown().nullable().optional(),
   createdAt: date,
   updatedAt: date,
 });

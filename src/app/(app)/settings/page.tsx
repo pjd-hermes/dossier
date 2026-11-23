@@ -13,6 +13,7 @@ import { providerOption } from "@/lib/ai/provider-options";
 import { lastNightlyBackup } from "@/lib/backup-schedule";
 import { backupsDir } from "@/lib/backups";
 import { mcpUrl } from "@/lib/connector/oauth";
+import { listTokens } from "@/lib/connector/tokens";
 import { exportFileName } from "@/lib/data-export";
 import { isSqliteUrl } from "@/lib/database";
 import { env } from "@/lib/env";
@@ -124,7 +125,7 @@ export default async function SettingsPage({ searchParams }: PageProps<"/setting
         </>
       ) : section === "connector" ? (
         <ConnectorSection
-          initial={{ on: settings.connectorEnabledAt !== null, redirects: settings.connectorRedirects }}
+          initial={{ on: settings.connectorEnabledAt !== null, redirects: settings.connectorRedirects, tokens: await listTokens() }}
           address={mcpUrl(env.DOSSIER_PUBLIC_URL ?? (await requestOrigin()))}
           inDesktopApp={isDesktopApp()}
         />
