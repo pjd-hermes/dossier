@@ -21,7 +21,7 @@ import { isBoardLink } from "@/lib/dedupe";
 import type { JobView } from "@/lib/jobs/runner";
 import { postedAgo, postingKey, type FoundPosting, type LibraryFilters, type PostingState, type ProfileFit, type ShownPosting } from "@/lib/job-search/search";
 import { portalNames, postingPage, sourceInfo } from "@/lib/job-search/sources";
-import { vettingBadge, vettingFact } from "@/lib/vetting-shape";
+import { directPostingLink, sourceBadge, vettingBadge, vettingFact } from "@/lib/vetting-shape";
 
 import {
   dismissFoundPosting,
@@ -495,6 +495,7 @@ function StateBadges({ state, now }: { state: PostingState; now: Date }) {
     state.dismissed && "Dismissed",
     // Fork: what the agent's checks found out (vetting-shape.ts).
     vettingBadge(state.vetting),
+    sourceBadge(state.vetting),
   ].filter(Boolean) as string[];
   if (badges.length === 0) return null;
   return (
@@ -577,6 +578,7 @@ function PostingDetail({
     .filter(Boolean)
     .join(" · ");
   // Only what the portal gave (U2): nothing is read into the posting for these.
+  const direct = directPostingLink(state.vetting);
   const facts = [
     { label: "Posted", value: ago },
     { label: "Where", value: [posting.place, posting.remote ? "Remote" : posting.remote === false ? "On-site or hybrid" : ""].filter(Boolean).join(" · ") },
@@ -584,6 +586,14 @@ function PostingDetail({
     { label: "Via", value: posting.via },
     { label: "Also on", value: state.foundOn.length > 1 ? portalNames(state.foundOn.slice(1).map((entry) => entry.portal)) : "" },
     { label: "Checked", value: vettingFact(state.vetting) },
+    {
+      label: "Direct posting",
+      value: direct && (
+        <a href={direct} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-ink">
+          {new URL(direct).host}
+        </a>
+      ),
+    },
   ].filter((fact) => fact.value);
   const scoreButton = (
     <ScoreMenu profiles={profiles} disabled={Boolean(scoring)} onScore={onScore}>

@@ -57,6 +57,32 @@ describe("vetting what the job agent found (fork)", () => {
     expect(other.id).toBeTruthy();
   });
 
+  it("records who posted it and the direct posting, and shows them in Positions' state only when known", async () => {
+    const row = await make("a");
+    const other = await make("b");
+    await recordVetting(row.id, { verdict: "legit", note: "Agency ad", source: "recruiter", directUrl: "https://acme.example/jobs/1" }, "n8n");
+    await recordVetting(other.id, { verdict: "legit", note: "" }, "n8n");
+    expect(vettingOf((await prisma().posting.findUniqueOrThrow({ where: { id: row.id } })).vetting)).toMatchObject({ source: "recruiter", directUrl: "https://acme.example/jobs/1" });
+    const states = await postingStates([
+      { source: "JSEARCH", externalId: "a", url: "" },
+      { source: "JSEARCH", externalId: "b", url: "" },
+    ]);
+    expect(states.get("JSEARCH:a")?.vetting).toEqual({ verdict: "legit", note: "Agency ad", checkedBy: "n8n", source: "recruiter", directUrl: "https://acme.example/jobs/1" });
+    expect(states.get("JSEARCH:b")?.vetting).toEqual({ verdict: "legit", note: "", checkedBy: "n8n" });
+  });
+
+  it("keeps the source and the direct posting when it later dismisses the posting as a scam", async () => {
+    const row = await make("a");
+    await recordVetting(row.id, { verdict: "doubtful", note: "Agency ad", source: "recruiter", directUrl: "https://acme.example/jobs/1" }, "n8n");
+    await dismissWithReason(row.id, { reason: "Asks for a fee" }, "n8n");
+    expect(vettingOf((await prisma().posting.findUniqueOrThrow({ where: { id: row.id } })).vetting)).toMatchObject({
+      verdict: "scam",
+      note: "Asks for a fee",
+      source: "recruiter",
+      directUrl: "https://acme.example/jobs/1",
+    });
+  });
+
   it("reads a stored value that doesn't fit as no verdict", () => {
     expect(vettingOf({ verdict: "maybe" })).toBeNull();
     expect(vettingOf(null)).toBeNull();

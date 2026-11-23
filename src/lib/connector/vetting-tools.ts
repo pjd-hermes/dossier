@@ -5,7 +5,7 @@ import { z } from "zod";
 
 import { companyHistory, listAgentFinds } from "@/lib/agent-finds";
 import { dismissWithReason, recordVetting, restorePosting } from "@/lib/vetting";
-import { checkSchema, VERDICTS } from "@/lib/vetting-shape";
+import { checkSchema, directUrlSchema, SOURCES, VERDICTS } from "@/lib/vetting-shape";
 
 import type { ConnectorAccess } from "./scopes";
 
@@ -67,18 +67,24 @@ export function registerVettingTools(server: McpServer, { linkTo, access }: { li
       title: "Record whether a posting looks real",
       description:
         "Saves what you found out about a posting: legit, doubtful or scam, a short note, and the checks you made (what you looked at and what you saw, e.g. the company's website, the salary against the market). Shown with the posting in Positions. " +
-        "It doesn't dismiss anything: use dismiss_posting for a scam. Recording again replaces the earlier verdict.",
+        "A posting a recruiter put up is not a reason to dismiss it: record source recruiter, and direct_url when you found the employer's own posting. " +
+        "It doesn't dismiss anything: use dismiss_posting for a scam. Recording again replaces the earlier verdict, source and link.",
       inputSchema: z.object({
         posting_id: postingId,
         verdict: z.enum(VERDICTS).describe("legit: a real posting from a real company. doubtful: something's off but not proven. scam: not a real job, or one that asks for money or private details."),
         note: z.string().max(1000).describe("Why, in a sentence or two"),
         checks: z.array(checkSchema).max(20).optional(),
+        source: z
+          .enum(SOURCES)
+          .optional()
+          .describe("Who posted it: direct (the employer's own posting), recruiter (a recruiter, agency or staffing firm) or unknown. Shown as a tag in Positions; unknown when left out."),
+        direct_url: directUrlSchema.optional().describe("The employer's own posting of the same job, when a recruiter's was the one found: a web address, shown as a link in Positions"),
       }),
       annotations: { readOnlyHint: false, idempotentHint: true },
     },
-    async ({ posting_id, verdict, note, checks }) => {
-      const result = await recordVetting(posting_id, { verdict, note, checks }, access.name);
-      return result.ok ? text({ posting_id, verdict, recorded: true }) : failure(result.message);
+    async ({ posting_id, verdict, note, checks, source, direct_url }) => {
+      const result = await recordVetting(posting_id, { verdict, note, checks, source, directUrl: direct_url }, access.name);
+      return result.ok ? text({ posting_id, verdict, source: source ?? "unknown", recorded: true }) : failure(result.message);
     },
   );
 

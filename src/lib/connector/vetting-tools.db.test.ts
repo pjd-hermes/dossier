@@ -90,6 +90,29 @@ describe("the tools for what the job agent found (fork)", () => {
     expect((await tool(token, "list_agent_finds", {})).json).toMatchObject({ finds: [{ postingId: posting.id, vetting: { verdict: "scam" } }] });
   });
 
+  it("records whether it was posted directly or by a recruiter, with the direct link", async () => {
+    const posting = await agentFind("a", "Acme");
+    const token = await tokenFor("dismiss");
+    const recorded = await tool(token, "record_vetting", { posting_id: posting.id, verdict: "legit", note: "Agency ad", source: "recruiter", direct_url: "https://acme.example/jobs/1" });
+    expect(recorded).toMatchObject({ isError: false, json: { posting_id: posting.id, verdict: "legit", source: "recruiter" } });
+    expect((await tool(token, "list_agent_finds", {})).json).toMatchObject({
+      finds: [{ postingId: posting.id, vetting: { verdict: "legit", source: "recruiter", directUrl: "https://acme.example/jobs/1" } }],
+    });
+    // Recorded again without them: a plain verdict says nothing about the source.
+    await tool(token, "record_vetting", { posting_id: posting.id, verdict: "legit", note: "Checked" });
+    expect((await tool(token, "list_agent_finds", {})).json).toMatchObject({ finds: [{ vetting: { source: "unknown" } }] });
+  });
+
+  it("refuses a direct link that isn't a web address, or is too long, as the caller's mistake", async () => {
+    const posting = await agentFind("a");
+    const token = await tokenFor("dismiss");
+    for (const direct_url of ["ftp://acme.example/jobs/1", "javascript:alert(1)", `https://acme.example/${"a".repeat(500)}`]) {
+      expect((await tool(token, "record_vetting", { posting_id: posting.id, verdict: "legit", note: "x", source: "recruiter", direct_url })).isError).toBe(true);
+    }
+    expect((await tool(token, "record_vetting", { posting_id: posting.id, verdict: "legit", note: "x", source: "agency" })).isError).toBe(true);
+    expect((await prisma().posting.findUniqueOrThrow({ where: { id: posting.id } })).vetting).toBeNull();
+  });
+
   it("explains a refusal in words, and treats a bad verdict or a missing reason as the caller's mistake", async () => {
     const token = await tokenFor("dismiss");
     expect(await tool(token, "dismiss_posting", { posting_id: "nope", reason: "x" })).toMatchObject({ isError: true, text: "That posting is no longer in Dossier." });
