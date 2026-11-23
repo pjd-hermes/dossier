@@ -12,7 +12,7 @@ changes that are not meant for upstream and are not offered back.
 3. Merge the release tag into a branch: `git switch -c sync/<tag>` then `git merge <tag>`.
 4. Test with `docker/bin/yarn test` (and `typecheck`, `lint`), fix what the merge broke, then merge the branch.
 
-A sync can go in steps (merge one release tag, test, merge the next on top), as 1.11.0 to 1.15.1 did through 1.13.0.
+A sync can go in steps (merge one release tag, test, merge the next on top), as 1.11.0 to 1.15.1 did through 1.13.0. A patch release (1.15.2) is one merge, and needs no fork edits when it touches nothing in the table below.
 Where the fork's own version of something was replaced by upstream's, take upstream's whole file
 (`git checkout <tag> -- <file>`): a half-merged file is worse than either side. Then check the
 [files we change](#upstream-files-we-change) below and keep each only while the fork still needs it.
@@ -42,7 +42,7 @@ release the fork is merged up to, then the fork's own semver. A `-` is used beca
    a draft that `desktop.yml` publishes once the desktop downloads are attached; here that never runs, so the release is
    published at once.
 
-Fork versions: `0.1.0` is the first release (upstream 1.11.0 merged, plus saved searches and multi-provider job search). The next one, `0.2.0`, is the release that has upstream 1.15.1 merged: the fork's saved searches, multi-provider job search and OpenCode Go are gone, replaced by upstream's, and a migration moves PJ's data (below). The next one, `0.3.0`, adds access tokens for the MCP endpoint and the tools for checking what the job agent finds (below).
+Fork versions: `0.1.0` is the first release (upstream 1.11.0 merged, plus saved searches and multi-provider job search). The next one, `0.2.0`, is the release that has upstream 1.15.1 merged: the fork's saved searches, multi-provider job search and OpenCode Go are gone, replaced by upstream's, and a migration moves PJ's data (below). The next one, `0.3.0`, adds access tokens for the MCP endpoint and the tools for checking what the job agent finds (below); it is tagged on upstream 1.15.2 (`v1.15.2-pjd.0.3.0`), because 1.15.2 was merged before the tag was cut.
 
 ## Rules
 
@@ -85,6 +85,8 @@ Fork versions: `0.1.0` is the first release (upstream 1.11.0 merged, plus saved 
 | `src/app/(app)/settings/connector-token-actions.ts`, `connector-tokens.tsx` (and tests) | The access tokens card in Settings → MCP connector |
 
 ## The 1.15.1 sync migration
+
+Order note: upstream's 1.15.2 added the SQLite migration `20261126100000_json_array_defaults`, which sorts after the fork's `20261126090000_fork_upstream_sync`. That is fine. The two touch different tables (`PortalCatalog` and `PostingSearch` defaults against settings, `AgentSearch` and `AgentCandidate`), and a database that already ran the fork's migration runs upstream's as a pending one. The fork's migration is not renamed, because databases have recorded it under that name.
 
 Upstream's 1.13 to 1.15 do what the fork's saved searches, multi-provider job search and OpenCode Go did, in their
 own way: up to three Agent searches (`AgentSearch`, with `AgentCandidateSearch` for which search found a candidate),
