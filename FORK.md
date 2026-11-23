@@ -62,11 +62,11 @@ Fork versions: `0.1.0` is the first release (upstream 1.11.0 merged, plus saved 
 | `prisma/schema.prisma`, `prisma/sqlite/schema.prisma` | `OPENCODE_GO` stays in the `AiProvider` enum so a database that had it stays valid. Nothing writes it. The SQLite file is derived (`yarn sqlite-schema`) | 1.15.1 sync |
 | `prisma/schema.prisma`, `prisma/sqlite/schema.prisma` | `Posting.vetting`: what was found out about whether a posting is real (see "Access tokens and vetting" below) | Tokens and vetting |
 | `src/app/api/mcp/route.ts` | Tries a named access token before OAuth, and passes its name and scope on | Tokens and vetting |
-| `src/lib/connector/tools.ts` | Two thin calls: `limitTools` (what a token may use) and `registerVettingTools` (the five new tools) | Tokens and vetting |
+| `src/lib/connector/tools.ts` | Three thin calls: `limitTools` (what a token may use), `registerVettingTools` (the five new tools) and `existingApplicationFor` (`draft_application` doesn't draft a posting twice) | Tokens and vetting; the guard in Source and drafting |
 | `src/lib/settings.ts`, `src/lib/data-export.ts`, `src/lib/data-import.ts` | `connectorTokens` and `connectorTokenUse` settings (kept out of exports); `vetting` carried through export and import, without a format version bump so upstream's numbering stays its own | Tokens and vetting |
 | `src/lib/job-search/search.ts`, `src/lib/postings.ts` | `PostingState.vetting`, there only when a verdict exists, so a state reads as upstream's without one | Tokens and vetting |
 | `src/app/(app)/settings/page.tsx`, `connector-section.tsx` | One call each: the access tokens card inside Settings → MCP connector | Tokens and vetting |
-| `src/app/(app)/jobs/posting-results.tsx` | A tag and a "Checked" fact for a posting's verdict | Tokens and vetting |
+| `src/app/(app)/jobs/posting-results.tsx` | A tag and a "Checked" fact for a posting's verdict; a "Via recruiter" tag and a "Direct posting" link | Tokens and vetting; Source and drafting |
 
 ## Files only this fork has
 
@@ -80,7 +80,8 @@ Fork versions: `0.1.0` is the first release (upstream 1.11.0 merged, plus saved 
 | `src/dependency-floor.test.ts` | Fails if the installed `next` or `sharp` is older than the floors set by their advisories |
 | `prisma/migrations/20261201090000_posting_vetting`, `prisma/sqlite/migrations/20261201090000_posting_vetting` | `Posting.vetting` (JSON, nullable) |
 | `src/lib/connector/tokens.ts`, `scopes.ts`, `vetting-tools.ts` (and their tests) | Named access tokens, which tools a token may use, and the five tools |
-| `src/lib/vetting.ts`, `vetting-shape.ts`, `agent-finds.ts` (and their tests) | Record a verdict, dismiss with a reason, restore; the verdict's shape and wording; what the agent's runs found and a company's history |
+| `src/lib/vetting.ts`, `vetting-shape.ts`, `agent-finds.ts` (and their tests) | Record a verdict (with who posted the job and the direct posting's link), dismiss with a reason, restore; the verdict's shape and wording; what the agent's runs found (with `applicationId`) and a company's history |
+| `src/lib/connector/draft-guard.ts` | `existingApplicationFor`: a posting that already has an application isn't drafted again |
 | `src/app/(app)/settings/connector-token-actions.ts`, `connector-tokens.tsx` (and tests) | The access tokens card in Settings → MCP connector |
 
 ## The 1.15.1 sync migration
@@ -113,14 +114,15 @@ For n8n and other apps that can't sign in through OAuth, and for checking what t
 - **Tokens:** Settings → MCP connector → Access tokens. A name and a scope (`read`, or `dismiss`), shown once, kept as a
   SHA-256 hash in the `connectorTokens` setting, revoked one by one. They work while the connector is on; "Disconnect all
   apps" doesn't revoke them (it's for OAuth apps). `read` sees only the tools that look; `dismiss` also `record_vetting`,
-  `dismiss_posting` and `restore_posting`. Claude's own sign-in keeps every tool.
+  `dismiss_posting` and `restore_posting`; `draft` also `draft_application` (Dossier's own AI model writes a Draft application, nothing is sent). Claude's own sign-in keeps every tool.
 - **Tools:** `list_agent_finds` (what agent runs found, with `since` for what's new after a run), `company_history`,
   `record_vetting` (legit, doubtful or scam, with a note and checks), `dismiss_posting` (records why, then dismisses, as the
   Dismiss button does; a posting the user saved or applied for is left alone) and `restore_posting` (Undo). They go through `postings.ts`, so there is one dismissal.
 - **Verdicts** are kept in `Posting.vetting` and shown in Positions (a tag, and a Checked line in the facts).
+- **Source and drafting** (plan: `.project/plans/2026-11-23-vetting-source-and-drafting.md`): a verdict also says who posted the job (`source`: `direct`, `recruiter` or `unknown`, from `record_vetting`'s `source`) and can link the employer's own posting (`direct_url`, http(s) only, up to 500 characters). Positions tags a recruiter's posting "Via recruiter" and links the direct one. It lives in the same JSON, so there's no migration; an older verdict reads as `unknown`. A recruiter's posting is never dismissed for that. `list_agent_finds` returns `applicationId`, and `draft_application` with a `posting_id` that already has an application returns it (`status: "exists"`) instead of drafting again, so an n8n retry can't spend the AI twice.
 - **n8n:** add an MCP Client node, endpoint `<your address>/api/mcp`, header `Authorization: Bearer dsr_...`. After each agent
   run: `list_agent_finds` with `since` and `only_unvetted`, check each posting (`get_posting`, `company_history`, web checks in
-  n8n), `record_vetting` for each, and `dismiss_posting` for the scams.
+  n8n), `record_vetting` for each (with `source`, and `direct_url` when the employer's own posting turns up), and `dismiss_posting` for the scams. To also draft, use a `draft` token and `draft_application` for the good ones, then `check_draft`; turn off the job agent's own drafting in Settings → Job agent so it doesn't draft before the vetting. The workflow's design is in the project's `specs/n8n-posting-vetting-workflow.md`.
 
 ## Kept on purpose
 
