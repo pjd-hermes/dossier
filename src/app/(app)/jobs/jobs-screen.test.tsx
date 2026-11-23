@@ -623,6 +623,22 @@ describe("the Archive (E22-7)", () => {
     expect(screen.getByText("Marked as a scam · Asks for a fee (n8n)")).toBeInTheDocument();
   });
 
+  it("tags a recruiter's posting and links the direct one when it's known (fork)", () => {
+    const vetting = { verdict: "legit" as const, note: "Agency ad", checkedBy: "n8n" };
+    renderScreen(
+      inArchive([
+        archived("a", { vetting: { ...vetting, source: "recruiter", directUrl: "https://acme.example/jobs/1" } }),
+        archived("b", { vetting: { ...vetting, source: "recruiter", directUrl: "javascript:alert(1)" } }),
+        archived("c", { vetting }),
+      ]),
+    );
+    expect(screen.getByRole("button", { name: /^Designer a/ })).toHaveTextContent("Via recruiter");
+    expect(screen.getByRole("button", { name: /^Designer c/ })).not.toHaveTextContent("Via recruiter");
+    expect(screen.getByText("Direct posting")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "acme.example" })).toHaveAttribute("href", "https://acme.example/jobs/1");
+    expect(screen.getAllByText("Direct posting")).toHaveLength(1);
+  });
+
   it("marks one a search found again as still listed, and nothing as new", () => {
     renderScreen(inArchive([archived("a", { stillListedAt: "2026-10-03T08:00:00.000Z" }), archived("b")]));
     expect(screen.getByRole("button", { name: /^Designer a/ })).toHaveTextContent("Still listed · Today");

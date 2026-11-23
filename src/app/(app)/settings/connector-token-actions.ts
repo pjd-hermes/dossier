@@ -10,7 +10,7 @@ import { loadSettings } from "@/lib/settings-data";
 // kept apart from actions.ts so that file stays upstream's.
 
 /** Makes a token. Its text is in the answer once: only a hash is kept. */
-export const createConnectorToken = action(z.object({ name: z.string().max(200), scope: z.enum(["read", "dismiss"]) }), async ({ name, scope }) => {
+export const createConnectorToken = action(z.object({ name: z.string().max(200), scope: z.enum(["read", "dismiss", "draft"]) }), async ({ name, scope }) => {
   if (!(await loadSettings()).connectorEnabledAt) throw new ActionError("The MCP connector is off. Turn it on first.");
   try {
     const { token } = await createToken({ name, scope });

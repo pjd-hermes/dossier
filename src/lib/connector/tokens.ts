@@ -11,7 +11,8 @@ import { connectorSince } from "./oauth";
 
 // Fork: named access tokens for the MCP endpoint (src/app/api/mcp), for apps
 // that can't sign in through OAuth, such as n8n. Each has a name and a scope
-// ("read" looks, "dismiss" also dismisses and records verdicts, scopes.ts),
+// ("read" looks, "dismiss" also dismisses and records verdicts, "draft" also
+// has Dossier's own AI model draft an application, scopes.ts),
 // is shown once when it's made, and is kept only as a SHA-256 hash in the
 // settings, so it can be revoked on its own. They work only while the
 // connector is on. They're the install's: exports leave them out.
@@ -19,7 +20,7 @@ import { connectorSince } from "./oauth";
 /** A problem with what the user asked for, in words to show them. */
 export class TokenError extends Error {}
 
-export type TokenScope = "read" | "dismiss";
+export type TokenScope = "read" | "dismiss" | "draft";
 export type TokenInfo = { id: string; name: string; scope: TokenScope; createdAt: string; lastUsedAt: string | null };
 
 const PREFIX = "dsr_";

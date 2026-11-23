@@ -84,7 +84,7 @@ export const json = <T extends z.ZodType>(schema: T) =>
 export const connectorTokenSchema = z.object({
   id: z.string(),
   name: z.string(),
-  scope: z.enum(["read", "dismiss"]),
+  scope: z.enum(["read", "dismiss", "draft"]),
   hash: z.string(),
   createdAt: z.string(),
 });

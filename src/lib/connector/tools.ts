@@ -45,6 +45,7 @@ import { applyStatusChange } from "@/lib/status-changes";
 import { appVersion } from "@/lib/version";
 
 import { connectorDraftJob } from "./draft";
+import { existingApplicationFor } from "./draft-guard";
 import { type ConnectorAccess, FULL_ACCESS, limitTools } from "./scopes";
 import { registerVettingTools } from "./vetting-tools";
 import { readPastedPosting } from "./handoff";
@@ -571,7 +572,8 @@ export function createDossierServer(origin: string, access: ConnectorAccess = FU
       title: "Have Dossier draft an application",
       description:
         "Has Dossier's own AI model draft the application, only when an AI provider is set up in Dossier's settings. " +
-        "Without one, write it yourself with get_profile, get_posting and save_application. Takes one to three minutes: follow it with check_draft.",
+        "Without one, write it yourself with get_profile, get_posting and save_application. Takes one to three minutes: follow it with check_draft. " +
+        "A posting_id that already has an application gets that application back (status exists) and nothing is drafted.",
       inputSchema: z.object({
         ...postingSource,
         note: z.string().max(2000).optional().describe("Anything the documents should stress, in the user's words"),
@@ -580,6 +582,9 @@ export function createDossierServer(origin: string, access: ConnectorAccess = FU
       annotations: { readOnlyHint: false, openWorldHint: true },
     },
     async ({ note, profile, ...source }) => {
+      // Fork: one posting, one draft (draft-guard.ts).
+      const existing = await existingApplicationFor(source.posting_id);
+      if (existing) return text({ status: "exists", application_id: existing, link: linkTo(`/applications/${existing}`), next: "An application was already made from this posting, so nothing was drafted." });
       if (!(await isAiUsable())) {
         return failure("Dossier has no AI model of its own set up. Write the application yourself: get_profile, get_posting, then save_application.");
       }

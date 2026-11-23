@@ -9,7 +9,7 @@ import { createConnectorToken, revokeConnectorToken } from "./connector-token-ac
 import { ConnectorTokens } from "./connector-tokens";
 
 vi.mock("./connector-token-actions", () => ({
-  createConnectorToken: vi.fn(async ({ name, scope }: { name: string; scope: "read" | "dismiss" }) => ({
+  createConnectorToken: vi.fn(async ({ name, scope }: { name: string; scope: "read" | "dismiss" | "draft" }) => ({
     ok: true,
     data: { token: "dsr_secret-token-text", tokens: [{ id: "t1", name, scope, createdAt: "2026-11-22T12:00:00.000Z", lastUsedAt: null }] },
   })),
@@ -38,6 +38,16 @@ describe("Settings → MCP connector → Access tokens (fork)", () => {
     expect(toast).toHaveBeenCalledWith("Token copied.");
     expect(screen.getByRole("list", { name: "Access tokens" })).toHaveTextContent("n8n");
     expect(screen.getByLabelText("Name")).toHaveValue("");
+  });
+
+  it("offers a scope that can also draft, and says what it adds", async () => {
+    const user = userEvent.setup();
+    render(<ConnectorTokens initial={[]} />);
+    await user.type(screen.getByLabelText("Name"), "n8n");
+    await user.click(screen.getByRole("radio", { name: "Read, dismiss and draft" }));
+    await user.click(screen.getByRole("button", { name: "Create token" }));
+    expect(createConnectorToken).toHaveBeenCalledWith({ name: "n8n", scope: "draft" });
+    expect(screen.getByText(/can also have Dossier's own AI model draft an application/)).toBeInTheDocument();
   });
 
   it("makes a read-only token unless the other scope is chosen", async () => {

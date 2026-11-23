@@ -4,7 +4,7 @@ import type { Posting, Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 
 import { dismissPosting, foundFromPosting, unmarkPosting } from "./postings";
-import type { Verdict } from "./vetting-shape";
+import { type Source, vettingOf, type Verdict } from "./vetting-shape";
 
 // Fork: what was found out about whether a posting is real, kept on the
 // posting (Posting.vetting) and set from the MCP tools (connector/vetting-tools.ts),
@@ -23,19 +23,19 @@ async function actionable(postingId: string): Promise<{ row: Posting } | { messa
   return { row };
 }
 
-const vettingValue = (input: { verdict: Verdict; note: string; checks?: { name: string; result: string }[] }, checkedBy: string): Prisma.InputJsonValue => ({
+type VettingInput = { verdict: Verdict; note: string; checks?: { name: string; result: string }[]; source?: Source; directUrl?: string };
+
+const vettingValue = (input: VettingInput, checkedBy: string): Prisma.InputJsonValue => ({
   verdict: input.verdict,
   note: input.note,
   checks: input.checks ?? [],
+  source: input.source ?? "unknown",
+  ...(input.directUrl ? { directUrl: input.directUrl } : {}),
   checkedBy,
   checkedAt: new Date().toISOString(),
 });
 
-export async function recordVetting(
-  postingId: string,
-  input: { verdict: Verdict; note: string; checks?: { name: string; result: string }[] },
-  checkedBy: string,
-): Promise<Outcome<unknown>> {
+export async function recordVetting(postingId: string, input: VettingInput, checkedBy: string): Promise<Outcome<unknown>> {
   const target = await actionable(postingId);
   if (!("row" in target)) return { ok: false, message: target.message };
   await prisma.posting.update({ where: { id: target.row.id }, data: { vetting: vettingValue(input, checkedBy) } });
@@ -54,7 +54,10 @@ export async function dismissWithReason(
   // What the user chose themselves isn't a tool's to undo: it can say what it found with record_vetting.
   if (target.row.savedAt) return { ok: false, message: "The user saved that posting, so it isn't dismissed. Record a verdict with record_vetting instead." };
   if (target.row.applicationId) return { ok: false, message: "An application was made from that posting, so it isn't dismissed. Record a verdict with record_vetting instead." };
-  await prisma.posting.update({ where: { id: target.row.id }, data: { vetting: vettingValue({ verdict: input.verdict ?? "scam", note: input.reason }, checkedBy) } });
+  // A dismissal says why, not who posted it: what an earlier verdict found out about that stays.
+  const before = vettingOf(target.row.vetting);
+  const value = vettingValue({ verdict: input.verdict ?? "scam", note: input.reason, source: before?.source, directUrl: before?.directUrl }, checkedBy);
+  await prisma.posting.update({ where: { id: target.row.id }, data: { vetting: value } });
   const { wasSaved } = await dismissPosting(foundFromPosting(target.row));
   return { ok: true, wasSaved };
 }

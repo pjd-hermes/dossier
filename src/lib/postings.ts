@@ -110,10 +110,12 @@ export async function unmarkPosting(ref: PostingRef, mark: "saved" | "dismissed"
   });
 }
 
-/** What Positions shows of a posting's verdict (fork): the verdict, its note and who checked, not the checks. Nothing at all without one, so a state reads as upstream's. */
+/** What Positions shows of a posting's verdict (fork): the verdict, its note and who checked, not the checks; the source and the direct posting only when known. Nothing at all without a verdict, so a state reads as upstream's. */
 const vettingState = (value: Prisma.JsonValue | undefined): Pick<PostingState, "vetting"> | Record<string, never> => {
   const vetting = vettingOf(value);
-  return vetting ? { vetting: { verdict: vetting.verdict, note: vetting.note, checkedBy: vetting.checkedBy } } : {};
+  if (!vetting) return {};
+  const { verdict, note, checkedBy, source, directUrl } = vetting;
+  return { vetting: { verdict, note, checkedBy, ...(source !== "unknown" ? { source } : {}), ...(directUrl ? { directUrl } : {}) } };
 };
 
 /** Where a posting stands with the job agent, from its candidate row. */

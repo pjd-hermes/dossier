@@ -387,4 +387,12 @@ describe("the MCP connector's access tokens (fork)", () => {
     expect(await createConnectorToken({ name: "N8N", scope: "read" })).toEqual({ ok: false, error: "There's a token with that name already." });
     expect(await revokeConnectorToken({ id: made.data.tokens[0]!.id })).toEqual({ ok: true, data: { tokens: [] } });
   });
+
+  it("makes a token that can draft, and refuses a scope that doesn't exist", async () => {
+    await setConnector({ on: true });
+    const made = await createConnectorToken({ name: "drafter", scope: "draft" });
+    if (!made.ok) throw new Error(made.error);
+    expect(made.data.tokens).toEqual([expect.objectContaining({ name: "drafter", scope: "draft" })]);
+    expect((await createConnectorToken({ name: "other", scope: "admin" as "draft" })).ok).toBe(false);
+  });
 });
