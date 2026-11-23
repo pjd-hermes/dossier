@@ -224,6 +224,23 @@ describe("the Claude connector's tools (#221)", () => {
     expect((await tool("update_application", { application_id: id, change: "Too late", match: [] })).text).toContain("Only a Draft");
   });
 
+  it("doesn't draft a posting that already has an application: it says which one, with or without a model (fork)", async () => {
+    const ledgerly = await prisma().application.findFirstOrThrow({ where: { company: "Ledgerly" } });
+    const taken = await prisma().posting.create({ data: { source: "JSEARCH", externalId: "taken", title: "Designer", company: "Ledgerly", description: "Text", complete: true, applicationId: ledgerly.id } });
+    const free = await prisma().posting.create({ data: { source: "JSEARCH", externalId: "free", title: "Designer", company: "Acme", description: "Text", complete: true } });
+    vi.mocked(startJob).mockClear();
+    for (const usable of [false, true]) {
+      fake.aiUsable = usable;
+      const answer = await tool("draft_application", { posting_id: taken.id });
+      expect(answer).toMatchObject({ isError: false, json: { status: "exists", application_id: ledgerly.id, link: expect.stringContaining(`/applications/${ledgerly.id}`) } });
+    }
+    expect(startJob).not.toHaveBeenCalled();
+    // One without an application, and a posting that isn't there, go on as they did.
+    expect((await tool("draft_application", { posting_id: free.id })).json).toMatchObject({ draft_id: "draft-job", status: "started" });
+    expect(await tool("draft_application", { posting_id: "nope" })).toMatchObject({ isError: true, text: expect.stringContaining("no longer in Dossier") });
+    expect(startJob).toHaveBeenCalledTimes(1);
+  });
+
   it("has Dossier's own model draft one only when there is one, and says how it's coming along", async () => {
     expect((await tool("draft_application", { posting_text: "Designer at Acme" })).text).toContain("save_application");
     fake.aiUsable = true;
