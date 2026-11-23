@@ -16,6 +16,7 @@ import { createConnectorToken, revokeConnectorToken } from "./connector-token-ac
 const SCOPES: { value: TokenScope; label: string }[] = [
   { value: "read", label: "Read only" },
   { value: "dismiss", label: "Read and dismiss" },
+  { value: "draft", label: "Read, dismiss and draft" },
 ];
 const scopeLabel = (scope: TokenScope) => SCOPES.find((option) => option.value === scope)!.label;
 
@@ -24,7 +25,8 @@ const scopeLabel = (scope: TokenScope) => SCOPES.find((option) => option.value =
  * as n8n (src/lib/connector/tokens.ts). A token is shown once, when it's
  * made; only its hash is kept. "Read only" can look at the profile,
  * applications and what the job agent found; "Read and dismiss" can also
- * record a verdict on a posting and dismiss it.
+ * record a verdict on a posting and dismiss it; "Read, dismiss and draft"
+ * can also have Dossier's own AI model draft an application.
  */
 export function ConnectorTokens({ initial }: { initial: TokenInfo[] }) {
   const track = useTrackSave();
@@ -56,8 +58,9 @@ export function ConnectorTokens({ initial }: { initial: TokenInfo[] }) {
         <p className="text-sm text-pretty text-muted">
           For an app that can&apos;t sign in through OAuth, such as n8n: add the token to its MCP client as a header,{" "}
           <code className="font-mono text-label">Authorization: Bearer &lt;token&gt;</code>. <strong>Read only</strong> can look at your profile, applications and
-          what the job agent found. <strong>Read and dismiss</strong> can also record whether a posting looks real and dismiss one. Neither can write
-          applications or run searches. Revoke a token when you stop using it: Disconnect all apps doesn&apos;t, since that&apos;s for apps signed in through OAuth.
+          what the job agent found. <strong>Read and dismiss</strong> can also record whether a posting looks real and dismiss one.{" "}
+          <strong>Read, dismiss and draft</strong> can also have Dossier&apos;s own AI model draft an application, which waits in Applications as a Draft for you to review.
+          None can run searches, change an application or send anything. Revoke a token when you stop using it: Disconnect all apps doesn&apos;t, since that&apos;s for apps signed in through OAuth.
         </p>
       </div>
 

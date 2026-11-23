@@ -141,6 +141,24 @@ describe("the tools for what the job agent found (fork)", () => {
     expect(names).not.toContain("save_application");
     expect(names).not.toContain("set_application_status");
     expect(names).not.toContain("search_jobs");
+    expect(names).not.toContain("draft_application");
+  });
+
+  it("gives a draft token what a dismiss token has and Dossier's own drafting, and no other application tool", async () => {
+    const names = ((await rpc(await tokenFor("draft"), "tools/list")).result?.tools ?? []).map((entry) => entry.name);
+    expect(NEW_TOOLS.every((name) => names.includes(name))).toBe(true);
+    expect(names).toEqual(expect.arrayContaining(["draft_application", "check_draft", "get_application", "get_posting", "list_applications"]));
+    for (const name of ["save_application", "update_application", "set_application_status", "search_jobs", "more_jobs", "save_job_scores"]) expect(names).not.toContain(name);
+  });
+
+  it("answers a dismiss or read token that calls draft_application as it does any unknown tool", async () => {
+    for (const scope of ["read", "dismiss"] as const) {
+      const token = await tokenFor(scope, `app ${scope}`);
+      const called = await tool(token, "draft_application", { posting_text: "A job." });
+      expect(called.isError).toBe(true);
+      expect(called.text.toLowerCase()).toContain("not found");
+    }
+    expect(await prisma().job.count()).toBe(0);
   });
 
   it("gives Claude's own sign-in every tool, with 'Claude' on a verdict", async () => {
