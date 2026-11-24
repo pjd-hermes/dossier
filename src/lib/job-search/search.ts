@@ -160,6 +160,8 @@ export type PostingState = {
   dismissed: boolean;
   /** The application made from it, or from the same link before Find jobs. */
   applicationId: string | null;
+  /** That application is past Draft (Sent or later): the posting is applied for. A draft links the posting but isn't applied for. */
+  applied: boolean;
   /** Its best score of the profiles it was scored against (#208, E25-5), or null before it's scored. */
   score: ProfileFit | null;
   /** Its score for each profile it was scored against, in the profiles' order (E25-5). */

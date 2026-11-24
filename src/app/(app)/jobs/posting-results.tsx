@@ -490,7 +490,8 @@ function StateBadges({ state, now }: { state: PostingState; now: Date }) {
   const badges = [
     // In the Archive, nothing is new; one a search found again there is "Still listed" (E22-7).
     state.archived ? state.stillListedAt && `Still listed · ${postedAgo(state.stillListedAt, now)}` : state.new && "New",
-    state.applicationId && "Applied",
+    state.applied && "Applied",
+    !state.applied && state.applicationId && "Draft",
     state.saved && "Saved",
     state.dismissed && "Dismissed",
     // Fork: what the agent's checks found out (vetting-shape.ts).
@@ -571,7 +572,7 @@ function PostingDetail({
   const portals = portalNames(state.foundOn.length > 0 ? state.foundOn.map((entry) => entry.portal) : [posting.source]);
   const when = ago === "Today" || ago === "Yesterday" ? ago.toLowerCase() : ago;
   const kicker = [
-    state.archived ? "In the Archive" : state.dismissed ? "Dismissed" : state.applicationId ? "Applied for" : state.saved ? "Saved" : state.new ? "New" : "",
+    state.archived ? "In the Archive" : state.dismissed ? "Dismissed" : state.applied ? "Applied for" : state.saved ? "Saved" : state.new ? "New" : "",
     when ? `posted ${when}` : "",
     portals ? `on ${portals}` : "",
   ]
@@ -669,7 +670,7 @@ function PostingDetail({
 
       {state.applicationId && (
         <p role="note" className="rounded-card bg-track px-4 py-3 text-meta">
-          You&apos;ve applied for this.{" "}
+          {state.applied ? "You've applied for this." : "You have a draft for this."}{" "}
           <Link href={`/applications/${state.applicationId}`} className="underline underline-offset-2">
             Open the application
           </Link>

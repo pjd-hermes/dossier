@@ -54,7 +54,7 @@ describe("the Archive (E22-7)", () => {
     await savePosting(posting("saved"));
     await dismissPosting(posting("dismissed"));
     // Applied for from the same link, before Positions linked it.
-    await prisma().application.create({ data: { company: "Company applied", role: "Designer", postingUrl: "https://jobs.example/applied?utm_source=x" } });
+    await prisma().application.create({ data: { company: "Company applied", role: "Designer", status: "SENT", postingUrl: "https://jobs.example/applied?utm_source=x" } });
     await prisma().postingScore.create({ data: { source: "JSEARCH", externalId: "scored", profileId: TEST_PROFILE_ID, score: 80, reasons: [], redFlags: [], scoredWith: "test" } });
 
     expect(await archiveUntouched({ now, days: 30 })).toBe(2);

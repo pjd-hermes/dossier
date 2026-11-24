@@ -67,11 +67,13 @@ test("searches, keeps postings, and starts an application from one", async ({ pa
   await page.waitForURL(/\/applications\/c/, { timeout: 30_000 });
   const applicationId = new URL(page.url()).pathname.split("/").pop()!;
 
-  // The posting now knows its application, and says so.
+  // The posting now knows its application; a draft isn't applied for, so it says Draft.
   const [posting] = await sql<{ applicationId: string | null }>(`SELECT "applicationId" FROM "Posting" WHERE "externalId" = 'e2e-ledgerly'`);
   expect(posting.applicationId).toBe(applicationId);
   await page.goto("/jobs?view=saved");
-  await expect(page.getByRole("list", { name: "Postings" }).getByRole("button", { name: /^Senior Product Designer, Payments/ })).toContainText("Applied");
+  const row = page.getByRole("list", { name: "Postings" }).getByRole("button", { name: /^Senior Product Designer, Payments/ });
+  await expect(row).toContainText("Draft");
+  await expect(row).not.toContainText("Applied");
   await expect(page.getByRole("link", { name: "Open the application" })).toHaveAttribute("href", `/applications/${applicationId}`);
 });
 
