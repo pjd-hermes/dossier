@@ -124,9 +124,24 @@ describe("postingStates", () => {
     await prisma().posting.update({ where: { source_externalId: ref }, data: { applicationId: application.id } });
 
     const states = await postingStates([found, other, third]);
-    expect(states.get("JSEARCH:job-1")).toEqual({ postingId: expect.any(String), new: false, saved: true, dismissed: false, applicationId: application.id, score: null, scores: [], foundOn: [{ portal: "JSEARCH", url: expect.any(String) }], archived: false, stillListedAt: null, agentSearches: [], agent: null });
-    expect(states.get("JSEARCH:job-2")).toEqual({ postingId: expect.any(String), new: false, saved: false, dismissed: true, applicationId: null, score: null, scores: [], foundOn: [{ portal: "JSEARCH", url: expect.any(String) }], archived: false, stillListedAt: null, agentSearches: [], agent: null });
-    expect(states.get("JSEARCH:job-3")).toEqual({ postingId: null, new: false, saved: false, dismissed: false, applicationId: null, score: null, scores: [], foundOn: [{ portal: "JSEARCH", url: expect.any(String) }], archived: false, stillListedAt: null, agentSearches: [], agent: null });
+    expect(states.get("JSEARCH:job-1")).toEqual({ postingId: expect.any(String), new: false, saved: true, dismissed: false, applicationId: application.id, applied: false, score: null, scores: [], foundOn: [{ portal: "JSEARCH", url: expect.any(String) }], archived: false, stillListedAt: null, agentSearches: [], agent: null });
+    expect(states.get("JSEARCH:job-2")).toEqual({ postingId: expect.any(String), new: false, saved: false, dismissed: true, applicationId: null, applied: false, score: null, scores: [], foundOn: [{ portal: "JSEARCH", url: expect.any(String) }], archived: false, stillListedAt: null, agentSearches: [], agent: null });
+    expect(states.get("JSEARCH:job-3")).toEqual({ postingId: null, new: false, saved: false, dismissed: false, applicationId: null, applied: false, score: null, scores: [], foundOn: [{ portal: "JSEARCH", url: expect.any(String) }], archived: false, stillListedAt: null, agentSearches: [], agent: null });
+  });
+
+  it("counts a posting as applied for only once its application is past Draft", async () => {
+    const draft = await prisma().application.create({ data: { title: "Draft", status: "DRAFT" } });
+    const sent = await prisma().application.create({ data: { title: "Sent", status: "SENT" } });
+    const other = { ...found, externalId: "job-2", url: "https://jobs.example/2" };
+    await savePosting(found);
+    await savePosting(other);
+    await prisma().posting.update({ where: { source_externalId: ref }, data: { applicationId: draft.id } });
+    await prisma().posting.update({ where: { source_externalId: { source: "JSEARCH", externalId: "job-2" } }, data: { applicationId: sent.id } });
+
+    const states = await postingStates([found, other]);
+    expect(states.get("JSEARCH:job-1")).toMatchObject({ applicationId: draft.id, applied: false });
+    expect(states.get("JSEARCH:job-2")).toMatchObject({ applicationId: sent.id, applied: true });
+    expect(await countLibrary()).toMatchObject({ applied: 1 });
   });
 
   it("counts applications made from the same link before Find jobs, ignoring tracking", async () => {

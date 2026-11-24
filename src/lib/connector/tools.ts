@@ -86,7 +86,8 @@ function postingLine(posting: ShownPosting | FoundPosting, number: number) {
     via: posting.via || undefined,
     url: posting.url || undefined,
     saved: state?.saved || undefined,
-    applied: state?.applicationId ? true : undefined,
+    applied: state?.applied ? true : undefined,
+    drafted: state?.applicationId && !state.applied ? true : undefined,
     fit: state?.score ?? undefined,
     snippet: posting.description.replace(/\s+/g, " ").slice(0, 280),
   };

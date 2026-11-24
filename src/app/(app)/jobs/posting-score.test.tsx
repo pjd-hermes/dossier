@@ -54,7 +54,7 @@ const posting = (id: string, score: ProfileFit | null = null): ShownPosting => (
   via: "",
   description: "The whole posting.",
   complete: true,
-  state: { postingId: "row", new: false, saved: true, dismissed: false, applicationId: null, score, scores: score ? [score] : [], foundOn: [{ portal: "JSEARCH", url: "" }], archived: false, stillListedAt: null, agentSearches: [], agent: null },
+  state: { postingId: "row", new: false, saved: true, dismissed: false, applicationId: null, applied: false, score, scores: score ? [score] : [], foundOn: [{ portal: "JSEARCH", url: "" }], archived: false, stillListedAt: null, agentSearches: [], agent: null },
 });
 const filters = { ...DEFAULT_FILTERS, show: "saved" as const };
 const open = (postings: ShownPosting[]) =>

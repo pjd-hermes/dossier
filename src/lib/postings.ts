@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { Posting, Prisma } from "@/generated/prisma/client";
+import { ApplicationStatus } from "@/generated/prisma/enums";
 import { breakdownOf, isOlderScore } from "@/lib/fit";
 import { bestFit, linkKey, postingKey, type FoundPosting, type PostingState, type ProfileFit } from "@/lib/job-search/search";
 import { stringsOf } from "@/lib/agent/candidates";
@@ -140,6 +141,7 @@ export async function postingStates(found: readonly (PostingRef & { url: string 
         savedAt: true,
         dismissedAt: true,
         applicationId: true,
+        application: { select: { status: true } },
         seenAt: true,
         archivedAt: true,
         lastFoundAt: true,
@@ -150,7 +152,7 @@ export async function postingStates(found: readonly (PostingRef & { url: string 
       },
     }),
     // An agent draft waiting for review isn't applied for yet (#195).
-    db.application.findMany({ where: { postingUrl: { not: "" }, awaitingReview: false }, select: { id: true, postingUrl: true }, orderBy: { createdAt: "asc" } }),
+    db.application.findMany({ where: { postingUrl: { not: "" }, awaitingReview: false }, select: { id: true, postingUrl: true, status: true }, orderBy: { createdAt: "asc" } }),
     db.postingScore.findMany({ where: { OR: refs }, include: { profile: { select: { name: true, sort: true, createdAt: true } } } }),
     // A posting the agent only skipped (E32-5) isn't one of its finds.
     db.agentCandidate.findMany({ where: { OR: refs, skipReason: null }, select: { id: true, source: true, externalId: true, status: true, applicationId: true } }),
@@ -172,15 +174,16 @@ export async function postingStates(found: readonly (PostingRef & { url: string 
     scoresOf.set(postingKey(row), [...(scoresOf.get(postingKey(row)) ?? []), fit]);
   }
   const byKey = new Map(stored.map((posting) => [postingKey(posting), posting]));
-  const byLink = new Map<string, string>();
+  const byLink = new Map<string, { id: string; status: ApplicationStatus }>();
   for (const application of applications) {
     const key = linkKey(application.postingUrl);
-    if (key && !byLink.has(key)) byLink.set(key, application.id);
+    if (key && !byLink.has(key)) byLink.set(key, { id: application.id, status: application.status });
   }
   return new Map(
     found.map((posting) => {
       const row = byKey.get(postingKey(posting));
       const link = linkKey(posting.url);
+      const linked = row?.applicationId ? { id: row.applicationId, status: row.application?.status ?? ApplicationStatus.DRAFT } : (link && byLink.get(link)) || null;
       return [
         postingKey(posting),
         {
@@ -188,7 +191,9 @@ export async function postingStates(found: readonly (PostingRef & { url: string 
           new: Boolean(row && !row.seenAt && !row.dismissedAt),
           saved: Boolean(row?.savedAt),
           dismissed: Boolean(row?.dismissedAt),
-          applicationId: row?.applicationId ?? ((link && byLink.get(link)) || null),
+          applicationId: linked?.id ?? null,
+          // A draft isn't applied for: only an application past Draft counts.
+          applied: Boolean(linked && linked.status !== ApplicationStatus.DRAFT),
           score: bestFit(scoresOf.get(postingKey(posting)) ?? []),
           scores: scoresOf.get(postingKey(posting)) ?? [],
           foundOn: [{ portal: posting.source, url: posting.url }, ...(row?.merged ?? []).map((other) => ({ portal: other.source, url: other.url }))].filter(

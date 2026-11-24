@@ -61,7 +61,7 @@ const countries = [
   { code: "fr", name: "France" },
 ];
 const query = { ...EMPTY_QUERY, keywords: "product designer", place: "Hamburg", country: "de" };
-const state: PostingState = { postingId: null, new: false, saved: false, dismissed: false, applicationId: null, score: null, scores: [], foundOn: [{ portal: "JSEARCH", url: "" }], archived: false, stillListedAt: null, agentSearches: [], agent: null };
+const state: PostingState = { postingId: null, new: false, saved: false, dismissed: false, applicationId: null, applied: false, score: null, scores: [], foundOn: [{ portal: "JSEARCH", url: "" }], archived: false, stillListedAt: null, agentSearches: [], agent: null };
 
 const posting = (id: string, extra: Partial<ShownPosting> = {}): ShownPosting => ({
   source: "JSEARCH",
@@ -381,7 +381,7 @@ describe("the results", () => {
   });
 
   it("links a posting you've applied for to its application", () => {
-    renderScreen({ ...found([posting("a", { state: { ...state, applicationId: "app-1" } })]) });
+    renderScreen({ ...found([posting("a", { state: { ...state, applicationId: "app-1", applied: true } })]) });
     expect(within(screen.getByRole("list", { name: "Postings" })).getByText("Applied")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open the application" })).toHaveAttribute("href", "/applications/app-1");
   });

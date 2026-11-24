@@ -267,7 +267,7 @@ async function readLibrary(filters: LibraryFilters, now: Date, db: Db): Promise<
     rows = rows.toSorted((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   }
   let shown = await withStates(rows.map(foundFromPosting), db);
-  if (filters.tab === "positions" && filters.show === "applied") shown = shown.filter((posting) => posting.state.applicationId !== null);
+  if (filters.tab === "positions" && filters.show === "applied") shown = shown.filter((posting) => posting.state.applied);
   // Coverage (E32-2): "Fits Backend" goes by that profile's score, else each posting's best.
   const coverageFor = (posting: ShownPosting) => coverageOf(filters.fits ? posting.state.scores.find((fit) => fit.profileId === filters.fits) : posting.state.score);
   if (filters.covers !== "any") shown = shown.filter((posting) => passes(coverageFor(posting), filters.covers));
