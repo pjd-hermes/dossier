@@ -1,0 +1,54 @@
+name: PR checks
+
+# Fork (FORK.md): runs ci.yml (lint, types, unit and database tests, and the
+# end-to-end suite) on each pull request into main, and says how it went in a
+# comment. ci.yml itself is left alone: it only runs on release branches and is
+# shared with the public repository's publish, so changing it would conflict on
+# every upstream sync.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A newer push to the same pull request stops the run it replaces.
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  report:
+    name: Report
+    needs: ci
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/github-script@v8
+        env:
+          RESULT: ${{ needs.ci.result }}
+        with:
+          script: |
+            const marker = "<!-- pr-checks-report -->";
+            const run = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const icon = { success: "✅", failure: "❌", cancelled: "⚪" }[process.env.RESULT] ?? "⚠️";
+            const body = [
+              marker,
+              `${icon} **PR checks: ${process.env.RESULT}** for ${context.sha.slice(0, 7)}`,
+              "",
+              "Lint, type-check, unit and database tests, and the end-to-end suite (fake AI, job portals and Google).",
+              `Details, coverage summary and, on a failure, the Playwright report and traces: [the run](${run}).`,
+            ].join("\n");
+            const { owner, repo } = context.repo;
+            const issue_number = context.payload.pull_request.number;
+            const comments = await github.paginate(github.rest.issues.listComments, { owner, repo, issue_number });
+            const existing = comments.find((comment) => comment.body?.startsWith(marker));
+            if (existing) await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            else await github.rest.issues.createComment({ owner, repo, issue_number, body });

@@ -14,6 +14,7 @@
         "docker/studio-proxy.mjs",
         "playwright.readme.config.ts",
         "e2e/setup.ts",
+        "e2e/serve.mts",
         "e2e/readme-{images,video}.ts",
         "site/main.js",
         "site/style.css",
