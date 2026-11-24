@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
+    "e2e:serve": "tsx e2e/serve.mts",
     "hash-password": "tsx scripts/hash-password.ts",
     "generate": "prisma generate && prisma generate --schema prisma/sqlite/schema.prisma",
     "sqlite-schema": "tsx prisma/sqlite/derive.ts",
